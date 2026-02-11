@@ -1,0 +1,88 @@
+
+
+# past-josh: PLEASE FOR THE LOVE OF GOD REFACTOR TO REGISTER-BASED!!
+# future-josh: your wish is my command
+class VM:
+    def __init__(self):
+        self.regs = [None] * 1024
+        self.vars = {}
+        self.ip = 0 # instruction pointer
+    
+    def run(self, code):
+        self.ip = 0
+        
+        while self.ip < len(code):
+            instr = code[self.ip]
+            op, a, b, c = instr.op, instr.a, instr.b, instr.c
+            
+            if op == "LOAD_CONST":
+                self.regs[a] = b
+            
+            elif op == "LOAD_VAR":
+                self.regs[a] = self.vars[b]
+            
+            elif op == "STORE_VAR":
+                self.vars[a] = self.regs[b]
+            
+            elif op == "PRINT":
+                print(self.regs[a])
+            
+            elif op == "JUMP":
+                self.ip = a
+                continue
+            
+            elif op == "JUMP_IF_TRUE":
+                if self.regs[a]:
+                    self.ip = b
+                    continue
+            
+            elif op == "JUMP_IF_FALSE":
+                if not self.regs[a]:
+                    self.ip = b
+                    continue
+            
+            # arithmetic
+            elif op == "ADD":
+                self.regs[a] = self.regs[b] + self.regs[c]
+
+            elif op == "SUB":
+                self.regs[a] = self.regs[b] - self.regs[c]
+
+            elif op == "MUL":
+                self.regs[a] = self.regs[b] * self.regs[c]
+
+            elif op == "DIV":
+                self.regs[a] = self.regs[b] / self.regs[c]
+
+            elif op == "POW":
+                self.regs[a] = self.regs[b] ** self.regs[c]
+
+            elif op == "NEG":
+                self.regs[a] = -self.regs[b]
+
+            elif op == "NOT":
+                self.regs[a] = not self.regs[b]
+
+            # comparisons
+            elif op == "EQ":
+                self.regs[a] = self.regs[b] == self.regs[c]
+
+            elif op == "NE":
+                self.regs[a] = self.regs[b] != self.regs[c]
+
+            elif op == "LT":
+                self.regs[a] = self.regs[b] < self.regs[c]
+
+            elif op == "GT":
+                self.regs[a] = self.regs[b] > self.regs[c]
+
+            elif op == "LE":
+                self.regs[a] = self.regs[b] <= self.regs[c]
+
+            elif op == "GE":
+                self.regs[a] = self.regs[b] >= self.regs[c]
+
+            else:
+                raise RuntimeError(f"Unknown opcode {op}")
+    
+            self.ip += 1

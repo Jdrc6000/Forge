@@ -1,0 +1,1053 @@
+--- main.py ---
+from src.frontend.lexer import Lexer
+from src.frontend.parser import Parser
+from src.semantic.analyser import Analyser, SymbolTable
+from src.ir.generator import IRGenerator
+from src.runtime.vm import VM
+
+code = """
+x = 5 - 5
+print(x)
+if x == 10:
+    print("yes")
+else:
+    print("no")
+"""
+
+lexer = Lexer(code)
+tokens = lexer.get_tokens()
+print(tokens)
+
+parser = Parser(tokens)
+tree = parser.parse()
+parser.dump(tree)
+
+symbol_table = SymbolTable()
+semantic_analysis = Analyser(symbol_table)
+semantic_analysis.analyse(tree)
+
+ir_generator = IRGenerator()
+ir_generator.generate(tree)
+ir_generator.ir.dump()
+
+vm = VM()
+vm.run(ir_generator.ir.code)
+for index, reg in enumerate(vm.regs):
+    if reg: print(f"r{index} {reg}")
+
+--- src/frontend/__init__.py ---
+
+
+--- src/frontend/ast_nodes.py ---
+from dataclasses import dataclass
+from typing import List, Optional, Any
+
+class AST():
+    inferred_type = None
+
+@dataclass
+class Module():
+    body: List[AST]
+
+@dataclass
+class Call(AST):
+    func: AST
+    args: List[AST]
+
+@dataclass
+class Assign(AST):
+    target: AST
+    value: AST
+
+@dataclass
+class Expr(AST):
+    value: AST
+
+@dataclass
+class Name(AST):
+    id: str
+
+@dataclass
+class Constant(AST):
+    value: Any
+
+@dataclass
+class BinOp(AST):
+    left: AST
+    op: str
+    right: AST
+
+@dataclass
+class UnOp(AST):
+    op: str
+    operand: AST
+
+@dataclass
+class If(AST):
+    test: AST
+    body: List[AST]
+    orelse: Optional[List[AST]] = None
+
+@dataclass
+class Compare(AST):
+    left: AST
+    op: str
+    comparators: List[AST]
+
+--- src/frontend/lexer.py ---
+from src.frontend.tokens import *
+
+class Lexer():
+    def __init__(self, text):
+        self.text = text
+        self.pos = 0
+        self.current_char = self.text[self.pos] if self.text else None
+        self.indents = [0]
+    
+    def advance(self):
+        self.pos += 1
+        
+        if self.pos < len(self.text):
+            self.current_char = self.text[self.pos]
+        else:
+            self.current_char = None
+    
+    def skip_whitespace(self):
+        while self.current_char and self.current_char in " \t":
+            self.advance()
+    
+    def peek(self):
+        if self.pos + 1 < len(self.text):
+            return self.text[self.pos + 1]
+        return None
+    
+    def handle_indentation(self, tokens):
+        count = 0
+        while self.current_char == " ":
+            count += 1
+            self.advance()
+
+        if self.current_char == "\n":
+            return
+
+        if count > self.indents[-1]:
+            self.indents.append(count)
+            tokens.append(Token(tt_indent))
+        else:
+            while count < self.indents[-1]:
+                self.indents.pop()
+                tokens.append(Token(tt_dedent))
+    
+    # had to crack this like the alan turing cracked cyphertext
+    def number(self):
+        num_str = ""
+        dot_count = 0
+        
+        while self.current_char and (self.current_char.isdigit() or self.current_char == "."):
+            if self.current_char == ".":
+                if dot_count == 1:
+                    break
+                
+                dot_count += 1
+                num_str += "."
+            else:
+                num_str += self.current_char
+            
+            self.advance()
+        
+        if dot_count == 0:
+            return Token(tt_int, int(num_str))
+        else:
+            return Token(tt_float, float(num_str))
+    
+    def string(self):
+        string_val = ""
+        quote_char = self.current_char
+        self.advance() # skip opening quote
+        
+        while self.current_char and self.current_char != quote_char:
+            string_val += self.current_char
+            self.advance()
+        
+        self.advance()
+        
+        return Token(tt_string, string_val)
+    
+    def name(self):
+        name_str = ""
+
+        while self.current_char and (self.current_char.isalnum() or self.current_char == "_"):
+            name_str += self.current_char
+            self.advance()
+
+        tok_type = keywords.get(name_str, tt_name)
+
+        if tok_type == tt_name:
+            return Token(tok_type, name_str)
+        else:
+            return Token(tok_type)
+    
+    def get_tokens(self):
+        tokens = []
+        
+        while self.current_char is not None:
+            if self.current_char == "\n":
+                self.advance()
+                tokens.append(Token(tt_newline))
+                self.handle_indentation(tokens)
+            
+            elif self.current_char.isspace():
+                self.skip_whitespace()
+            
+            elif self.current_char == "!" and self.peek() == "=":
+                self.advance()
+                self.advance()
+                tokens.append(Token(tt_ne))
+            elif self.current_char == "=" and self.peek() == "=":
+                self.advance()
+                self.advance()
+                tokens.append(Token(tt_ee))
+            elif self.current_char == "<" and self.peek() == "=":
+                self.advance()
+                self.advance()
+                tokens.append(Token(tt_le))
+            elif self.current_char == ">" and self.peek() == "=":
+                self.advance()
+                self.advance()
+                tokens.append(Token(tt_ge))
+            elif self.current_char == ">":
+                self.advance()
+                tokens.append(Token(tt_greater))
+            elif self.current_char == "<":
+                self.advance()
+                tokens.append(Token(tt_less))
+            
+            elif self.current_char in single_char_tokens:
+                tok_type = single_char_tokens[self.current_char]
+                tokens.append(Token(tok_type))
+                self.advance()
+            
+            elif self.current_char.isdigit():
+                tokens.append(self.number())
+            
+            elif self.current_char.isalpha() or self.current_char == "_":
+                tokens.append(self.name())
+            
+            elif self.current_char in "\"'":
+                tokens.append(self.string())
+            
+            else:
+                raise Exception(f"Illegal character: {self.current_char}")
+        
+        while len(self.indents) > 1:
+            self.indents.pop()
+            tokens.append(Token(tt_dedent))
+        
+        tokens.append(Token(tt_eof))
+        return tokens
+
+--- src/frontend/parser.py ---
+from src.frontend.tokens import *
+from src.frontend.ast_nodes import *
+
+class Parser():
+    def __init__(self, tokens):
+        self.tokens = tokens
+        self.pos = 0
+        self.current_token = self.tokens[self.pos]
+    
+    def advance(self):
+        self.pos += 1
+        
+        if self.pos < len(self.tokens):
+            self.current_token = self.tokens[self.pos]
+        else:
+            self.current_token = Token("EOF")
+    
+    def peek(self):
+        if self.pos + 1 < len(self.tokens):
+            return self.tokens[self.pos + 1]
+        return None
+    
+    def skip_newlines(self):
+        while self.current_token.type == "NEWLINE":
+            self.advance()
+    
+    def parse(self):
+        body = []
+
+        while self.current_token.type != "EOF":
+            self.skip_newlines()
+            if self.current_token.type == "EOF":
+                break
+            body.append(self.statement())
+
+        return Module(body)
+    
+    def statement(self):
+        if self.current_token.type == "PRINT":
+            return self.parse_print()
+        elif self.current_token.type == "IF":
+            return self.parse_if()
+        elif self.current_token.type == "NAME" and self.peek() and self.peek().type == "EQ":
+            return self.parse_assign()
+        else:
+            return Expr(self.parse_expr())
+    
+    def parse_print(self):
+        # CONSUME
+        self.advance()
+        if self.current_token.type != "LPAREN":
+            raise Exception("Expected '(' after print")
+        self.advance()
+        
+        expr_node = self.parse_expr()
+        
+        if self.current_token.type != "RPAREN":
+            raise Exception("Expected ')' after print argument")
+        self.advance()
+        
+        return Call(
+            func=Name("print"), # because it makes the interpreter happy
+            args=[expr_node]
+        )
+    
+    def parse_if(self):
+        self.advance()  # skip 'if'
+        test = self.parse_expr()
+
+        if self.current_token.type != "COLON":
+            raise Exception("Expected ':' after if condition")
+        self.advance()
+
+        if self.current_token.type != "NEWLINE":
+            raise Exception("Expected newline after ':'")
+        self.advance()
+
+        if self.current_token.type != "INDENT":
+            raise Exception("Expected indent")
+        self.advance()
+
+        body = []
+
+        while True:
+            self.skip_newlines()
+            if self.current_token.type == "DEDENT":
+                break
+            body.append(self.statement())
+
+        if self.current_token.type == "DEDENT" and self.peek() and self.peek().type == "ELSE":
+            self.advance()      # DEDENT
+            self.advance()      # ELSE
+
+            if self.current_token.type != "COLON":
+                raise Exception("Expected ':' after else")
+            self.advance()
+
+            if self.current_token.type != "NEWLINE":
+                raise Exception("Expected newline after ':'")
+            self.advance()
+
+            if self.current_token.type != "INDENT":
+                raise Exception("Expected indent in else block")
+            self.advance()  # consume INDENT
+
+            else_body = []
+            while True:
+                self.skip_newlines()
+                if self.current_token.type == "DEDENT":
+                    break
+                else_body.append(self.statement())
+            self.advance()  # consume DEDENT at end of else
+            return If(test, body, else_body)
+        else:
+            self.advance()  # consume DEDENT
+            return If(test, body)
+    
+    def parse_assign(self):
+        name_token = self.current_token
+        self.advance()
+        
+        if self.current_token.type != "EQ":
+            raise Exception("Expected '=' after variable name")
+        self.advance()
+        
+        value_node = self.parse_expr()
+        
+        return Assign(
+            target=Name(name_token.value),
+            value=value_node
+        )
+    
+    def parse_comparison(self):
+        left = self.parse_binop()
+        comparators = []
+        ops = []
+
+        while self.current_token.type in ("EE","NE","LESS","GREATER","LE","GE"):
+            ops.append(self.current_token.type)
+            self.advance()
+            comparators.append(self.parse_binop())
+
+        if ops:
+            # adjust AST if needed
+            return Compare(left, ops[0], comparators)
+
+        return left
+    
+    def parse_logic_or(self):
+        left = self.parse_logic_and()
+        
+        while self.current_token.type == "OR":
+            self.advance()
+            right = self.parse_logic_and()
+            left = BinOp(left, "or", right)
+        
+        return left
+
+    def parse_logic_and(self):
+        left = self.parse_comparison()
+        
+        while self.current_token.type == "AND":
+            self.advance()
+            right = self.parse_comparison()
+            left = BinOp(left, "and", right)
+        
+        return left
+    
+    # why?
+    #  for hotswapping past-josh, obviously...
+    def parse_expr(self):
+        return self.parse_logic_or()
+    
+    def parse_binop(self, min_prec=0):
+        left = self.parse_unary()
+        
+        while True:
+            op_token = self.current_token
+            
+            if op_token.type in ("PLUS", "MINUS", "MUL", "DIV", "POW"):
+                prec = self.get_precedence(op_token)
+                
+                if prec < min_prec:
+                    break
+                self.advance()
+                
+                right = self.parse_binop(prec+1)
+                left = BinOp(
+                    left=left,
+                    op=self.token_to_op(op_token),
+                    right=right
+                )
+
+            else:
+                break
+        
+        return left
+    
+    def parse_unary(self):
+        tok = self.current_token
+        if tok.type in ("PLUS", "MINUS"):
+            self.advance()
+            return UnOp(op=self.token_to_op(tok), operand=self.parse_unary())
+        elif tok.type == "NOT":
+            self.advance()
+            return UnOp(op="not", operand=self.parse_unary())
+        else:
+            return self.parse_primary()
+    
+    def parse_primary(self):
+        tok = self.current_token
+        
+        if tok.type == "INT" or tok.type == "FLOAT":
+            self.advance()
+            return Constant(tok.value)
+        elif tok.type == "STRING":
+            self.advance()
+            return Constant(tok.value)
+        elif tok.type == "NAME":
+            self.advance()
+            return Name(tok.value)
+        elif tok.type == "LPAREN":
+            self.advance()
+            expr = self.parse_expr()
+            
+            if self.current_token.type != "RPAREN":
+                raise Exception("Expected ')'")
+            self.advance()
+            
+            return expr
+        else:
+            raise Exception(f"Unexpected token: {tok}")
+    
+    def token_to_op(self, token):
+        mapping = {
+            "PLUS": "+",
+            "MINUS": "-",
+            "MUL": "*",
+            "DIV": "/",
+            "POW": "^"
+        }
+        
+        return mapping[token.type]
+    
+    # if i have to spell "precedence" again
+    # i will literally light my codebase on fire
+    def get_precedence(self, token):
+        prec = {
+            "PLUS": 1,
+            "MINUS": 1,
+            "MUL": 2,
+            "DIV": 2,
+            "POW": 3
+        }
+        
+        return prec[token.type]
+    
+    # my beloved dump function, i love this piece of scrap
+    def dump(self, node, indent=0):
+        pad = "  " * indent
+
+        if isinstance(node, Module):
+            print(f"{pad}Module")
+            for stmt in node.body:
+                self.dump(stmt, indent + 1)
+        
+        elif isinstance(node, Expr):
+            print(f"{pad}Expr")
+            self.dump(node.value, indent + 1)
+        
+        elif isinstance(node, Call):
+            print(f"{pad}Call")
+            self.dump(node.func, indent + 1)
+            for arg in node.args:
+                self.dump(arg, indent + 1)
+        
+        elif isinstance(node, Name):
+            print(f"{pad}Name({node.id})")
+        
+        elif isinstance(node, Constant):
+            print(f"{pad}Constant({node.value})")
+        
+        elif isinstance(node, Assign):
+            print(f"{pad}Assign")
+            self.dump(node.target, indent + 1)
+            self.dump(node.value, indent + 1)
+        
+        elif isinstance(node, BinOp):
+            print(f"{pad}BinaryOp({node.op})")
+            self.dump(node.left, indent + 1)
+            self.dump(node.right, indent + 1)
+        
+        elif isinstance(node, UnOp):
+            print(f"{pad}UnaryOp({node.op})")
+            self.dump(node.operand, indent + 1)
+        
+        elif isinstance(node, If):
+            print(f"{pad}If")
+            self.dump(node.test, indent + 1)
+            print(f"{pad}  Body:")
+            for line in node.body:
+                self.dump(line, indent + 2)
+            if node.orelse:
+                print(f"{pad}  Else:")
+                for line in node.orelse:
+                    self.dump(line, indent + 2)
+        
+        elif isinstance(node, Compare):
+            print(f"{pad}Compare({node.op})")
+            self.dump(node.left, indent + 1)
+            for comparator in node.comparators:
+                self.dump(comparator, indent + 1)
+        
+        else:
+            print(f"{pad}{node}")
+
+--- src/frontend/tokens.py ---
+tt_int = "INT"
+tt_float = "FLOAT"
+tt_string = "STRING"
+tt_name = "NAME"
+tt_plus = "PLUS"
+tt_minus = "MINUS"
+tt_mul = "MUL"
+tt_div = "DIV"
+tt_pow = "POW"
+tt_lparen = "LPAREN"
+tt_rparen = "RPAREN"
+tt_eq = "EQ"
+tt_bang = "BANG"
+tt_less = "LESS"
+tt_greater = "GREATER"
+tt_ne = "NE"
+tt_ee = "EE"
+tt_le = "LE"
+tt_ge = "GE"
+tt_comma = "COMMA"
+tt_colon = "COLON"
+tt_newline = "NEWLINE"
+tt_indent = "INDENT"
+tt_dedent = "DEDENT"
+tt_eof = "EOF"
+tt_if = "IF"
+tt_else = "ELSE"
+tt_print = "PRINT"
+tt_and = "AND"
+tt_or = "OR"
+tt_not = "NOT"
+
+keywords = {
+    "if": tt_if,
+    "else": tt_else,
+    "print": tt_print,
+    "and": tt_and,
+    "or": tt_or,
+    "not": tt_not
+}
+
+single_char_tokens = {
+    "+": tt_plus,
+    "-": tt_minus,
+    "*": tt_mul,
+    "/": tt_div,
+    "^": tt_pow,
+    "(": tt_lparen,
+    ")": tt_rparen,
+    "=": tt_eq,
+    "!": tt_bang,
+    "<": tt_less,
+    ">": tt_greater,
+    ",": tt_comma,
+    ":": tt_colon
+}
+
+binops = {
+    "+": "ADD",
+    "-": "SUB",
+    "*": "MUL",
+    "/": "DIV",
+    "^": "POW"
+}
+
+cmp = {
+    "EE": "EQ",
+    "NE": "NE",
+    "LESS": "LT",
+    "GREATER": "GT",
+    "LE": "LE",
+    "GE": "GE"
+}
+
+class Token():
+    def __init__(self, _type, value=None):
+        self.type = _type
+        self.value = value
+        
+    def __repr__(self):
+        if self.value is not None:
+            return f"{self.type}:{self.value}"
+        return self.type
+
+--- src/ir/__init__.py ---
+
+
+--- src/ir/generator.py ---
+from src.frontend.ast_nodes import *
+from src.frontend.tokens import *
+from src.ir.ir import IR
+
+class IRGenerator:
+    def __init__(self):
+        self.ir = IR()
+    
+    def generate(self, node):
+        method = f"gen_{type(node).__name__}"
+        return getattr(self, method)(node)
+    
+    def gen_Module(self, node):
+        for stmt in node.body:
+            self.generate(stmt)
+    
+    def gen_Constant(self, node):
+        r = self.ir.new_reg()
+        self.ir.emit("LOAD_CONST", r, node.value)
+        return r
+    
+    def gen_Name(self, node):
+        r = self.ir.new_reg()
+        self.ir.emit("LOAD_VAR", r, node.id)
+        return r
+    
+    def gen_Assign(self, node):
+        value_reg = self.generate(node.value)
+        self.ir.emit("STORE_VAR", node.target.id, value_reg)
+    
+    def gen_Call(self, node):
+        arg_regs = [self.generate(a) for a in node.args]
+
+        if node.func.id == "print":
+            self.ir.emit("PRINT", arg_regs[0])
+        else:
+            self.ir.emit("CALL", node.func.id)
+    
+    # uses backpatching
+    def gen_If(self, node):
+        test = self.generate(node.test)
+
+        jmp_false = len(self.ir.code)
+        self.ir.emit("JUMP_IF_FALSE", test, None)
+
+        for stmt in node.body:
+            self.generate(stmt)
+
+        if node.orelse:
+            jmp_end = len(self.ir.code)
+            self.ir.emit("JUMP", None)
+
+            self.ir.code[jmp_false].b = len(self.ir.code)
+
+            for stmt in node.orelse:
+                self.generate(stmt)
+
+            self.ir.code[jmp_end].a = len(self.ir.code)
+        else:
+            self.ir.code[jmp_false].b = len(self.ir.code)
+    
+    def gen_Compare(self, node):
+        left = self.generate(node.left)
+        right = self.generate(node.comparators[0])
+        dest = self.ir.new_reg()
+        self.ir.emit(cmp[node.op], dest, left, right)
+        return dest
+    
+    def gen_BinOp(self, node):
+        # short-circuit
+        if node.op in ("and", "or"):
+            return self.gen_logic(node)
+
+        left = self.generate(node.left)
+        right = self.generate(node.right)
+
+        dest = self.ir.new_reg()
+        self.ir.emit(binops[node.op], dest, left, right)
+
+        return dest
+    
+    def gen_logic(self, node):
+        left = self.generate(node.left)
+        dest = self.ir.new_reg()
+
+        # copy left into dest
+        self.ir.emit("MOVE", dest, left)
+
+        if node.op == "and":
+            jmp = len(self.ir.code)
+            self.ir.emit("JUMP_IF_FALSE", dest, None)
+
+            right = self.generate(node.right)
+            self.ir.emit("MOVE", dest, right)
+
+            self.ir.code[jmp].b = len(self.ir.code)
+
+        else:  # OR
+            jmp = len(self.ir.code)
+            self.ir.emit("JUMP_IF_TRUE", dest, None)
+
+            right = self.generate(node.right)
+            self.ir.emit("MOVE", dest, right)
+
+            self.ir.code[jmp].b = len(self.ir.code)
+
+        return dest
+    
+    def gen_UnOp(self, node):
+        src = self.generate(node.operand)
+        dest = self.ir.new_reg()
+
+        if node.op == "-":
+            self.ir.emit("NEG", dest, src)
+        elif node.op == "not":
+            self.ir.emit("NOT", dest, src)
+        else:
+            self.ir.emit("MOVE", dest, src)
+
+        return dest
+
+--- src/ir/ir.py ---
+from dataclasses import dataclass
+from typing import Any, List
+
+@dataclass()
+class Instr:
+    op: str
+    a: Any = None
+    b: Any = None
+    c: Any = None
+
+class IR:
+    def __init__(self):
+        self.code: List[Instr] = []
+        self.reg = 0
+    
+    def new_reg(self):
+        r = self.reg
+        self.reg += 1
+        return r
+    
+    def emit(self, op, a=None, b=None, c=None):
+        self.code.append(Instr(op, a, b, c))
+    
+    # ast-dump had a child!!
+    def dump(self):
+        for i, instr in enumerate(self.code):
+            print(f"{i} {instr.op} {instr.a} {instr.b} {instr.c}") #:04 to pad to 4 0's
+
+--- src/runtime/__init__.py ---
+
+
+--- src/runtime/vm.py ---
+
+
+# past-josh: PLEASE FOR THE LOVE OF GOD REFACTOR TO REGISTER-BASED!!
+# future-josh: your wish is my command
+class VM:
+    def __init__(self):
+        self.regs = [None] * 1024
+        self.vars = {}
+        self.ip = 0 # instruction pointer
+    
+    def run(self, code):
+        self.ip = 0
+        
+        while self.ip < len(code):
+            instr = code[self.ip]
+            op, a, b, c = instr.op, instr.a, instr.b, instr.c
+            
+            if op == "LOAD_CONST":
+                self.regs[a] = b
+            
+            elif op == "LOAD_VAR":
+                self.regs[a] = self.vars[b]
+            
+            elif op == "STORE_VAR":
+                self.vars[a] = self.regs[b]
+            
+            elif op == "PRINT":
+                print(self.regs[a])
+            
+            elif op == "JUMP":
+                self.ip = a
+                continue
+            
+            elif op == "JUMP_IF_TRUE":
+                if self.regs[a]:
+                    self.ip = b
+                    continue
+            
+            elif op == "JUMP_IF_FALSE":
+                if not self.regs[a]:
+                    self.ip = b
+                    continue
+            
+            # arithmetic
+            elif op == "ADD":
+                self.regs[a] = self.regs[b] + self.regs[c]
+
+            elif op == "SUB":
+                self.regs[a] = self.regs[b] - self.regs[c]
+
+            elif op == "MUL":
+                self.regs[a] = self.regs[b] * self.regs[c]
+
+            elif op == "DIV":
+                self.regs[a] = self.regs[b] / self.regs[c]
+
+            elif op == "POW":
+                self.regs[a] = self.regs[b] ** self.regs[c]
+
+            elif op == "NEG":
+                self.regs[a] = -self.regs[b]
+
+            elif op == "NOT":
+                self.regs[a] = not self.regs[b]
+
+            # comparisons
+            elif op == "EQ":
+                self.regs[a] = self.regs[b] == self.regs[c]
+
+            elif op == "NE":
+                self.regs[a] = self.regs[b] != self.regs[c]
+
+            elif op == "LT":
+                self.regs[a] = self.regs[b] < self.regs[c]
+
+            elif op == "GT":
+                self.regs[a] = self.regs[b] > self.regs[c]
+
+            elif op == "LE":
+                self.regs[a] = self.regs[b] <= self.regs[c]
+
+            elif op == "GE":
+                self.regs[a] = self.regs[b] >= self.regs[c]
+
+            else:
+                raise RuntimeError(f"Unknown opcode {op}")
+    
+            self.ip += 1
+
+--- src/semantic/__init__.py ---
+
+
+--- src/semantic/analyser.py ---
+from src.semantic.types import *
+from src.frontend.ast_nodes import *
+from src.semantic.symbol_table import *
+
+# message for future-josh
+#  this is going to be the most confusing, awful, horrid-looking code you have ever seen,
+#  so dont even bother trying to debug this pile of horse-doodoo
+
+# future-josh here, i have to debug this now...
+
+class Analyser():
+    def __init__(self, symbols):
+        self.symbols: SymbolTable = symbols
+    
+    def analyse(self, node):
+        if isinstance(node, Module):
+            for stmt in node.body:
+                self.analyse(stmt)
+        
+        elif isinstance(node, Call):
+            for arg in node.args:
+                self.analyse(arg)
+            return None
+        
+        # unused?
+        elif isinstance(node, Expr):
+            self.analyse(node.value)
+        
+        elif isinstance(node, Assign):
+            value_type = self.analyse(node.value)
+            self.symbols.define(node.target.id, value_type)
+        
+        elif isinstance(node, Name):
+            if not self.symbols.exists(node.id):
+                raise Exception(f"Undefined variable '{node.id}'")
+            return self.symbols.get(node.id)["type"]
+        
+        elif isinstance(node, Constant):
+            value = node.value
+            if isinstance(value, str):
+                node.inferred_type = STRING
+                return STRING
+            elif isinstance(value, (float, int)):
+                node.inferred_type = NUMBER
+                return NUMBER
+        
+        elif isinstance(node, BinOp):
+            left = self.analyse(node.left)
+            right = self.analyse(node.right)
+
+            if not left.supports_binary(node.op, right):
+                raise TypeError(
+                    f"Operator '{node.op}' not supported between {left} and {right}"
+                )
+
+            node.inferred_type = left
+            return left
+        
+        elif isinstance(node, If):
+            test_type = self.analyse(node.test)
+            if test_type != BOOL:
+                raise TypeError("If condition must be boolean")
+
+            for stmt in node.body:
+                self.analyse(stmt)
+
+            if node.orelse:
+                for stmt in node.orelse:
+                    self.analyse(stmt)
+        
+        elif isinstance(node, Compare):
+            left = self.analyse(node.left)
+            right = self.analyse(node.comparators[0])
+
+            if not left.is_compatible(right):
+                raise TypeError(f"Cannot compare {left} with {right}")
+
+            node.inferred_type = BOOL
+            return BOOL
+    
+        else:
+            return None
+
+--- src/semantic/symbol_table.py ---
+class SymbolTable():
+    def __init__(self):
+        # name, type (string, number)
+        self.symbols = {}
+    
+    def define(self, name, _type):
+        self.symbols[name] = {"type": _type, "scope": "global"} # just for testing
+    
+    def exists(self, name):
+        return name in self.symbols
+    
+    def get(self, name):
+        return self.symbols.get(name)
+
+--- src/semantic/types.py ---
+from dataclasses import dataclass
+from typing import Tuple, ClassVar
+
+@dataclass(frozen=True, slots=True)
+class Type:
+    name: ClassVar[str]
+
+    def is_compatible(self, other: "Type") -> bool:
+        return self == other
+
+    def supports_binary(self, op: str, other: "Type") -> bool:
+        return False
+
+@dataclass(frozen=True)
+class NumberType(Type):
+    name: ClassVar[str] = "number"
+
+    def supports_binary(self, op: str, other: "Type") -> bool:
+        if op in {"+", "-", "*", "/", "^"}:
+            return isinstance(other, NumberType)
+        return False
+
+@dataclass(frozen=True)
+class StringType(Type):
+    name: ClassVar[str] = "string"
+
+    def supports_binary(self, op: str, other: "Type") -> bool:
+        if op == "+":
+            return isinstance(other, StringType)
+        return False
+
+@dataclass(frozen=True)
+class BoolType(Type):
+    name: ClassVar[str] = "bool"
+
+# future proofing
+@dataclass(frozen=True)
+class ListType(Type):
+    name: ClassVar[str] = "list"
+    element_type: Type
+
+@dataclass(frozen=True)
+class UnknownType(Type):
+    name: str = "unknown"
+
+    def is_compatible(self, other: "Type") -> bool:
+        return True
+
+NUMBER = NumberType()
+STRING = StringType()
+BOOL = BoolType()
+UNKNOWN = UnknownType()
+

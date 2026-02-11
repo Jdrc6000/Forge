@@ -1,0 +1,315 @@
+from src.frontend.tokens import *
+from src.frontend.ast_nodes import *
+
+class Parser():
+    def __init__(self, tokens):
+        self.tokens = tokens
+        self.pos = 0
+        self.current_token = self.tokens[self.pos]
+    
+    def advance(self):
+        self.pos += 1
+        
+        if self.pos < len(self.tokens):
+            self.current_token = self.tokens[self.pos]
+        else:
+            self.current_token = Token("EOF")
+    
+    def peek(self):
+        if self.pos + 1 < len(self.tokens):
+            return self.tokens[self.pos + 1]
+        return None
+    
+    def skip_newlines(self):
+        while self.current_token.type == "NEWLINE":
+            self.advance()
+    
+    def parse(self):
+        body = []
+
+        while self.current_token.type != "EOF":
+            self.skip_newlines()
+            if self.current_token.type == "EOF":
+                break
+            body.append(self.statement())
+
+        return Module(body)
+    
+    def statement(self):
+        if self.current_token.type == "PRINT":
+            return self.parse_print()
+        elif self.current_token.type == "IF":
+            return self.parse_if()
+        elif self.current_token.type == "NAME" and self.peek() and self.peek().type == "EQ":
+            return self.parse_assign()
+        else:
+            return Expr(self.parse_expr())
+    
+    def parse_print(self):
+        # CONSUME
+        self.advance()
+        if self.current_token.type != "LPAREN":
+            raise Exception("Expected '(' after print")
+        self.advance()
+        
+        expr_node = self.parse_expr()
+        
+        if self.current_token.type != "RPAREN":
+            raise Exception("Expected ')' after print argument")
+        self.advance()
+        
+        return Call(
+            func=Name("print"), # because it makes the interpreter happy
+            args=[expr_node]
+        )
+    
+    def parse_if(self):
+        self.advance()  # skip 'if'
+        test = self.parse_expr()
+
+        if self.current_token.type != "COLON":
+            raise Exception("Expected ':' after if condition")
+        self.advance()
+
+        if self.current_token.type != "NEWLINE":
+            raise Exception("Expected newline after ':'")
+        self.advance()
+
+        if self.current_token.type != "INDENT":
+            raise Exception("Expected indent")
+        self.advance()
+
+        body = []
+
+        while True:
+            self.skip_newlines()
+            if self.current_token.type == "DEDENT":
+                break
+            body.append(self.statement())
+
+        if self.current_token.type == "DEDENT" and self.peek() and self.peek().type == "ELSE":
+            self.advance()      # DEDENT
+            self.advance()      # ELSE
+
+            if self.current_token.type != "COLON":
+                raise Exception("Expected ':' after else")
+            self.advance()
+
+            if self.current_token.type != "NEWLINE":
+                raise Exception("Expected newline after ':'")
+            self.advance()
+
+            if self.current_token.type != "INDENT":
+                raise Exception("Expected indent in else block")
+            self.advance()  # consume INDENT
+
+            else_body = []
+            while True:
+                self.skip_newlines()
+                if self.current_token.type == "DEDENT":
+                    break
+                else_body.append(self.statement())
+            self.advance()  # consume DEDENT at end of else
+            return If(test, body, else_body)
+        else:
+            self.advance()  # consume DEDENT
+            return If(test, body)
+    
+    def parse_assign(self):
+        name_token = self.current_token
+        self.advance()
+        
+        if self.current_token.type != "EQ":
+            raise Exception("Expected '=' after variable name")
+        self.advance()
+        
+        value_node = self.parse_expr()
+        
+        return Assign(
+            target=Name(name_token.value),
+            value=value_node
+        )
+    
+    def parse_comparison(self):
+        left = self.parse_binop()
+        comparators = []
+        ops = []
+
+        while self.current_token.type in ("EE","NE","LESS","GREATER","LE","GE"):
+            ops.append(self.current_token.type)
+            self.advance()
+            comparators.append(self.parse_binop())
+
+        if ops:
+            # adjust AST if needed
+            return Compare(left, ops[0], comparators)
+
+        return left
+    
+    def parse_logic_or(self):
+        left = self.parse_logic_and()
+        
+        while self.current_token.type == "OR":
+            self.advance()
+            right = self.parse_logic_and()
+            left = BinOp(left, "or", right)
+        
+        return left
+
+    def parse_logic_and(self):
+        left = self.parse_comparison()
+        
+        while self.current_token.type == "AND":
+            self.advance()
+            right = self.parse_comparison()
+            left = BinOp(left, "and", right)
+        
+        return left
+    
+    # why?
+    #  for hotswapping past-josh, obviously...
+    def parse_expr(self):
+        return self.parse_logic_or()
+    
+    def parse_binop(self, min_prec=0):
+        left = self.parse_unary()
+        
+        while True:
+            op_token = self.current_token
+            
+            if op_token.type in ("PLUS", "MINUS", "MUL", "DIV", "POW"):
+                prec = self.get_precedence(op_token)
+                
+                if prec < min_prec:
+                    break
+                self.advance()
+                
+                right = self.parse_binop(prec+1)
+                left = BinOp(
+                    left=left,
+                    op=self.token_to_op(op_token),
+                    right=right
+                )
+
+            else:
+                break
+        
+        return left
+    
+    def parse_unary(self):
+        tok = self.current_token
+        if tok.type in ("PLUS", "MINUS"):
+            self.advance()
+            return UnOp(op=self.token_to_op(tok), operand=self.parse_unary())
+        elif tok.type == "NOT":
+            self.advance()
+            return UnOp(op="not", operand=self.parse_unary())
+        else:
+            return self.parse_primary()
+    
+    def parse_primary(self):
+        tok = self.current_token
+        
+        if tok.type == "INT" or tok.type == "FLOAT":
+            self.advance()
+            return Constant(tok.value)
+        elif tok.type == "STRING":
+            self.advance()
+            return Constant(tok.value)
+        elif tok.type == "NAME":
+            self.advance()
+            return Name(tok.value)
+        elif tok.type == "LPAREN":
+            self.advance()
+            expr = self.parse_expr()
+            
+            if self.current_token.type != "RPAREN":
+                raise Exception("Expected ')'")
+            self.advance()
+            
+            return expr
+        else:
+            raise Exception(f"Unexpected token: {tok}")
+    
+    def token_to_op(self, token):
+        mapping = {
+            "PLUS": "+",
+            "MINUS": "-",
+            "MUL": "*",
+            "DIV": "/",
+            "POW": "^"
+        }
+        
+        return mapping[token.type]
+    
+    # if i have to spell "precedence" again
+    # i will literally light my codebase on fire
+    def get_precedence(self, token):
+        prec = {
+            "PLUS": 1,
+            "MINUS": 1,
+            "MUL": 2,
+            "DIV": 2,
+            "POW": 3
+        }
+        
+        return prec[token.type]
+    
+    # my beloved dump function, i love this piece of scrap
+    def dump(self, node, indent=0):
+        pad = "  " * indent
+
+        if isinstance(node, Module):
+            print(f"{pad}Module")
+            for stmt in node.body:
+                self.dump(stmt, indent + 1)
+        
+        elif isinstance(node, Expr):
+            print(f"{pad}Expr")
+            self.dump(node.value, indent + 1)
+        
+        elif isinstance(node, Call):
+            print(f"{pad}Call")
+            self.dump(node.func, indent + 1)
+            for arg in node.args:
+                self.dump(arg, indent + 1)
+        
+        elif isinstance(node, Name):
+            print(f"{pad}Name({node.id})")
+        
+        elif isinstance(node, Constant):
+            print(f"{pad}Constant({node.value})")
+        
+        elif isinstance(node, Assign):
+            print(f"{pad}Assign")
+            self.dump(node.target, indent + 1)
+            self.dump(node.value, indent + 1)
+        
+        elif isinstance(node, BinOp):
+            print(f"{pad}BinaryOp({node.op})")
+            self.dump(node.left, indent + 1)
+            self.dump(node.right, indent + 1)
+        
+        elif isinstance(node, UnOp):
+            print(f"{pad}UnaryOp({node.op})")
+            self.dump(node.operand, indent + 1)
+        
+        elif isinstance(node, If):
+            print(f"{pad}If")
+            self.dump(node.test, indent + 1)
+            print(f"{pad}  Body:")
+            for line in node.body:
+                self.dump(line, indent + 2)
+            if node.orelse:
+                print(f"{pad}  Else:")
+                for line in node.orelse:
+                    self.dump(line, indent + 2)
+        
+        elif isinstance(node, Compare):
+            print(f"{pad}Compare({node.op})")
+            self.dump(node.left, indent + 1)
+            for comparator in node.comparators:
+                self.dump(comparator, indent + 1)
+        
+        else:
+            print(f"{pad}{node}")
