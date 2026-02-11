@@ -5,12 +5,8 @@ from src.ir.generator import IRGenerator
 from src.runtime.vm import VM
 
 code = """
-x = 5 - 5
-print(x)
-if x == 10:
-    print("yes")
-else:
-    print("no")
+x = 4 + 3
+print(2 + x)
 """
 
 lexer = Lexer(code)
@@ -29,7 +25,7 @@ ir_generator = IRGenerator()
 ir_generator.generate(tree)
 ir_generator.ir.dump()
 
-vm = VM()
+vm = VM(num_regs=6)
 vm.run(ir_generator.ir.code)
 for index, reg in enumerate(vm.regs):
     if reg: print(f"r{index} {reg}")
