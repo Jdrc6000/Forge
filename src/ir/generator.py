@@ -66,18 +66,22 @@ class IRGenerator:
         self.ir.emit(cmp[node.op], dest, left, right)
         return dest
     
+    # binop the goat for using less regs
     def gen_BinOp(self, node):
-        # short-circuit
+        # short-circuit logic
         if node.op in ("and", "or"):
             return self.gen_logic(node)
 
+        # generate left first
         left = self.generate(node.left)
+        # generate right
         right = self.generate(node.right)
 
-        dest = self.ir.new_reg()
+        # reuse left register as destination
+        dest = left
         self.ir.emit(binops[node.op], dest, left, right)
-
         return dest
+
     
     def gen_logic(self, node):
         left = self.generate(node.left)

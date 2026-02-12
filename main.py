@@ -2,11 +2,14 @@ from src.frontend.lexer import Lexer
 from src.frontend.parser import Parser
 from src.semantic.analyser import Analyser, SymbolTable
 from src.ir.generator import IRGenerator
+from src.runtime.regalloc import linear_scan_allocate
 from src.runtime.vm import VM
 
 code = """
-x = 4 + 3
-print(2 + x)
+a = (1+2) * (3+4)
+print(a)
+
+print(5)
 """
 
 lexer = Lexer(code)
@@ -25,7 +28,11 @@ ir_generator = IRGenerator()
 ir_generator.generate(tree)
 ir_generator.ir.dump()
 
-vm = VM(num_regs=6)
-vm.run(ir_generator.ir.code)
-for index, reg in enumerate(vm.regs):
-    if reg: print(f"r{index} {reg}")
+num_regs = 6
+allocated = linear_scan_allocate(ir_generator.ir.code, num_regs=num_regs)
+
+print(allocated)
+
+vm = VM(num_regs=num_regs)
+vm.run(allocated)
+vm.dump_regs()

@@ -3,11 +3,14 @@ from src.frontend.lexer import Lexer
 from src.frontend.parser import Parser
 from src.semantic.analyser import Analyser, SymbolTable
 from src.ir.generator import IRGenerator
+from src.runtime.regalloc import linear_scan_allocate
 from src.runtime.vm import VM
 
 code = """
-x = 4 + 3
-print(2 + x)
+a = (1+2) * (3+4)
+print(a)
+
+print(5)
 """
 
 lexer = Lexer(code)
@@ -26,13 +29,14 @@ ir_generator = IRGenerator()
 ir_generator.generate(tree)
 ir_generator.ir.dump()
 
-vm = VM(num_regs=6)
-vm.run(ir_generator.ir.code)
-for index, reg in enumerate(vm.regs):
-    if reg: print(f"r{index} {reg}")
+num_regs = 6
+allocated = linear_scan_allocate(ir_generator.ir.code, num_regs=num_regs)
 
---- src/frontend/__init__.py ---
+print(allocated)
 
+vm = VM(num_regs=num_regs)
+vm.run(allocated)
+vm.dump_regs()
 
 --- src/frontend/ast_nodes.py ---
 from dataclasses import dataclass
@@ -644,9 +648,6 @@ class Token():
             return f"{self.type}:{self.value}"
         return self.type
 
---- src/ir/__init__.py ---
-
-
 --- src/ir/generator.py ---
 from src.frontend.ast_nodes import *
 from src.frontend.tokens import *
@@ -716,18 +717,22 @@ class IRGenerator:
         self.ir.emit(cmp[node.op], dest, left, right)
         return dest
     
+    # binop the goat for using less regs
     def gen_BinOp(self, node):
-        # short-circuit
+        # short-circuit logic
         if node.op in ("and", "or"):
             return self.gen_logic(node)
 
+        # generate left first
         left = self.generate(node.left)
+        # generate right
         right = self.generate(node.right)
 
-        dest = self.ir.new_reg()
+        # reuse left register as destination
+        dest = left
         self.ir.emit(binops[node.op], dest, left, right)
-
         return dest
+
     
     def gen_logic(self, node):
         left = self.generate(node.left)
@@ -798,8 +803,95 @@ class IR:
         for i, instr in enumerate(self.code):
             print(f"{i} {instr.op} {instr.a} {instr.b} {instr.c}") #:04 to pad to 4 0's
 
---- src/runtime/__init__.py ---
+--- src/runtime/regalloc.py ---
+from collections import namedtuple
 
+# Live range structure
+class LiveRange:
+    def __init__(self, reg, start, end):
+        self.reg = reg       # virtual register
+        self.start = start   # first instruction index
+        self.end = end       # last instruction index
+        self.phys = None     # physical register assigned
+
+# Compute defs and uses per opcode
+def get_defs_uses(instr):
+    if instr.op in ("LOAD_CONST", "LOAD_VAR"):
+        return [instr.a], []
+    elif instr.op in ("ADD","SUB","MUL","DIV","POW"):
+        return [instr.a], [instr.b, instr.c]
+    elif instr.op in ("NEG","NOT","MOVE"):
+        return [instr.a], [instr.b]
+    elif instr.op == "STORE_VAR":
+        return [], [instr.b]
+    elif instr.op in ("PRINT",):
+        return [], [instr.a]
+    elif instr.op in ("JUMP", "JUMP_IF_TRUE", "JUMP_IF_FALSE"):
+        return [], [instr.a] if instr.op == "JUMP_IF_TRUE" or instr.op == "JUMP_IF_FALSE" else []
+    else:
+        return [], []
+
+# Compute live ranges based on defs/uses
+def compute_live_ranges(code):
+    first = {}
+    last = {}
+
+    for i, instr in enumerate(code):
+        defs, uses = get_defs_uses(instr)
+        for r in defs + uses:
+            if isinstance(r, int):
+                first.setdefault(r, i)
+                last[r] = i
+
+    ranges = [LiveRange(r, first[r], last[r]) for r in first]
+    ranges.sort(key=lambda x: x.start)
+    return ranges
+
+# Linear scan allocator
+def linear_scan_allocate(code, num_regs):
+    ranges = compute_live_ranges(code)
+    active = []
+    free_regs = list(range(num_regs))
+    new_code = []
+
+    def expire_old(current_start):
+        nonlocal active, free_regs
+        still_active = []
+        for r in active:
+            if r.end >= current_start:
+                still_active.append(r)
+            else:
+                free_regs.append(r.phys)
+        active[:] = still_active
+
+    for r in ranges:
+        expire_old(r.start)
+        if not free_regs:
+            raise RuntimeError("Out of registers (spilling not implemented)")
+        r.phys = free_regs.pop(0)  # assign lowest-numbered free reg
+        active.append(r)
+        active.sort(key=lambda x: x.end)
+
+    # Rewrite registers in a new IR list
+    mapping = {r.reg: r.phys for r in ranges}
+    for instr in code:
+        new_instr = type(instr)(instr.op, instr.a, instr.b, instr.c)
+
+        defs, uses = get_defs_uses(instr)
+        reg_operands = set(defs + uses)
+
+        if new_instr.a in reg_operands:
+            new_instr.a = mapping[new_instr.a]
+
+        if new_instr.b in reg_operands:
+            new_instr.b = mapping[new_instr.b]
+
+        if new_instr.c in reg_operands:
+            new_instr.c = mapping[new_instr.c]
+
+        new_code.append(new_instr)
+
+    return new_code
 
 --- src/runtime/vm.py ---
 
@@ -814,17 +906,12 @@ class VM:
         self.vars = {}
         self.ip = 0 # instruction pointer
     
-    def alloc_reg(self):
-        print("allocating reg")
-        if not self.free_regs:
-            raise RuntimeError("Out of registers")
-        return self.free_regs.pop(0)
-    
-    def free_reg(self, reg):
-        print(f"freeing reg: {reg} ({self.regs[reg]})")
-        if True: #reg not in self.free_regs:
-            self.free_regs.insert(0, reg)
-            self.regs[reg] = None
+    def dump_regs(self): # simple dump debugger
+        print(f"used regs: {len([reg for reg in self.regs if reg is not None])}")
+        
+        for index, reg in enumerate(self.regs): # prints every used reg
+            if reg:
+                print(f"reg {index} {reg}")
     
     def run(self, code):
         self.ip = 0
@@ -832,15 +919,6 @@ class VM:
         while self.ip < len(code):
             instr = code[self.ip]
             op, a, b, c = instr.op, instr.a, instr.b, instr.c
-            
-            if op in ("LOAD_CONST", "LOAD_VAR"):
-                if a is None:
-                    a = self.alloc_reg()
-                    instr.a = a
-            elif op in ("ADD","SUB","MUL","DIV","POW","NEG","NOT","EQ","NE","LT","GT","LE","GE"):
-                if a is None:
-                    a = self.alloc_reg()
-                    instr.a = a
             
             if op == "LOAD_CONST":
                 self.regs[a] = b
@@ -850,11 +928,9 @@ class VM:
             
             elif op == "STORE_VAR":
                 self.vars[a] = self.regs[b]
-                self.free_reg(b)
             
             elif op == "PRINT":
                 print(self.regs[a])
-                self.free_reg(a)
             
             elif op == "JUMP":
                 self.ip = a
@@ -864,13 +940,11 @@ class VM:
                 if self.regs[a]:
                     self.ip = b
                     continue
-                self.free_reg(a)
             
             elif op == "JUMP_IF_FALSE":
                 if not self.regs[a]:
                     self.ip = b
                     continue
-                self.free_reg(a)
             
             elif op == "MOVE":
                 self.regs[a] = self.regs[b]
@@ -878,75 +952,48 @@ class VM:
             # arithmetic
             elif op == "ADD":
                 self.regs[a] = self.regs[b] + self.regs[c]
-                self.free_reg(b)
-                self.free_reg(c)
 
             elif op == "SUB":
                 self.regs[a] = self.regs[b] - self.regs[c]
-                self.free_reg(b)
-                self.free_reg(c)
 
             elif op == "MUL":
                 self.regs[a] = self.regs[b] * self.regs[c]
-                self.free_reg(b)
-                self.free_reg(c)
 
             elif op == "DIV":
                 self.regs[a] = self.regs[b] / self.regs[c]
-                self.free_reg(b)
-                self.free_reg(c)
 
             elif op == "POW":
                 self.regs[a] = self.regs[b] ** self.regs[c]
-                self.free_reg(b)
-                self.free_reg(c)
 
             elif op == "NEG":
                 self.regs[a] = -self.regs[b]
-                self.free_reg(b)
 
             elif op == "NOT":
                 self.regs[a] = not self.regs[b]
-                self.free_reg(b)
 
             # comparisons
             elif op == "EQ":
                 self.regs[a] = self.regs[b] == self.regs[c]
-                self.free_reg(b)
-                self.free_reg(c)
 
             elif op == "NE":
                 self.regs[a] = self.regs[b] != self.regs[c]
-                self.free_reg(b)
-                self.free_reg(c)
 
             elif op == "LT":
                 self.regs[a] = self.regs[b] < self.regs[c]
-                self.free_reg(b)
-                self.free_reg(c)
 
             elif op == "GT":
                 self.regs[a] = self.regs[b] > self.regs[c]
-                self.free_reg(b)
-                self.free_reg(c)
 
             elif op == "LE":
                 self.regs[a] = self.regs[b] <= self.regs[c]
-                self.free_reg(b)
-                self.free_reg(c)
 
             elif op == "GE":
                 self.regs[a] = self.regs[b] >= self.regs[c]
-                self.free_reg(b)
-                self.free_reg(c)
 
             else:
                 raise RuntimeError(f"Unknown opcode {op}")
     
             self.ip += 1
-
---- src/semantic/__init__.py ---
-
 
 --- src/semantic/analyser.py ---
 from src.semantic.types import *
