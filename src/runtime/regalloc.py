@@ -1,3 +1,4 @@
+from src.ir.ir import Instr
 from collections import namedtuple
 
 # Live range structure
@@ -7,6 +8,7 @@ class LiveRange:
         self.start = start   # first instruction index
         self.end = end       # last instruction index
         self.phys = None     # physical register assigned
+        self.slot = None
 
 # Compute defs and uses per opcode
 def get_defs_uses(instr):
@@ -22,6 +24,10 @@ def get_defs_uses(instr):
         return [], [instr.a]
     elif instr.op in ("JUMP", "JUMP_IF_TRUE", "JUMP_IF_FALSE"):
         return [], [instr.a] if instr.op == "JUMP_IF_TRUE" or instr.op == "JUMP_IF_FALSE" else []
+    elif instr.op == "SPILL_STORE":
+        return [], [instr.b]
+    elif instr.op == "SPILL_LOAD":
+        return [instr.a], []
     else:
         return [], []
 
@@ -41,12 +47,17 @@ def compute_live_ranges(code):
     ranges.sort(key=lambda x: x.start)
     return ranges
 
-# Linear scan allocator
+def pick_spill(active, current):
+    candidates = active + [current]
+    return max(candidates, key=lambda r: r.end)
+
 def linear_scan_allocate(code, num_regs):
     ranges = compute_live_ranges(code)
     active = []
     free_regs = list(range(num_regs))
     new_code = []
+    
+    next_slot = 0
 
     def expire_old(current_start):
         nonlocal active, free_regs
@@ -61,28 +72,53 @@ def linear_scan_allocate(code, num_regs):
     for r in ranges:
         expire_old(r.start)
         if not free_regs:
-            raise RuntimeError("Out of registers (spilling not implemented)")
-        r.phys = free_regs.pop(0)  # assign lowest-numbered free reg
+            victim = pick_spill(active, r)
+
+            if victim is r:
+                # spill the new range immediately
+                r.slot = next_slot
+                next_slot += 1
+                r.phys = free_regs.pop(0)
+                active.append(r)
+                continue
+            else:
+                # spill an active range
+                victim.slot = next_slot
+                next_slot += 1
+
+                free_regs.append(victim.phys)
+                active.remove(victim)
+        
+        r.phys = free_regs.pop(0)
         active.append(r)
         active.sort(key=lambda x: x.end)
 
     # Rewrite registers in a new IR list
     mapping = {r.reg: r.phys for r in ranges}
+    range_map = {r.reg: r for r in ranges}
     for instr in code:
-        new_instr = type(instr)(instr.op, instr.a, instr.b, instr.c)
 
         defs, uses = get_defs_uses(instr)
-        reg_operands = set(defs + uses)
 
-        if new_instr.a in reg_operands:
-            new_instr.a = mapping[new_instr.a]
+        # reload uses
+        for u in uses:
+            lr = range_map[u]
+            if lr.slot is not None:
+                new_code.append(Instr("SPILL_LOAD", lr.phys, lr.slot))
 
-        if new_instr.b in reg_operands:
-            new_instr.b = mapping[new_instr.b]
-
-        if new_instr.c in reg_operands:
-            new_instr.c = mapping[new_instr.c]
+        new_instr = Instr(
+            instr.op,
+            mapping.get(instr.a, instr.a),
+            mapping.get(instr.b, instr.b),
+            mapping.get(instr.c, instr.c)
+        )
 
         new_code.append(new_instr)
+
+        # spill defs
+        for d in defs:
+            lr = range_map[d]
+            if lr.slot is not None:
+                new_code.append(Instr("SPILL_STORE", lr.slot, lr.phys))
 
     return new_code

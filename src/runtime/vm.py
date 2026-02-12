@@ -1,5 +1,3 @@
-
-
 # past-josh: PLEASE FOR THE LOVE OF GOD REFACTOR TO REGISTER-BASED!!
 # future-josh: your wish is my command
 class VM:
@@ -8,6 +6,7 @@ class VM:
         self.regs = [None] * self.num_regs
         self.free_regs = list(range(self.num_regs))
         self.vars = {}
+        self.stack = {}
         self.ip = 0 # instruction pointer
     
     def dump_regs(self): # simple dump debugger
@@ -52,6 +51,13 @@ class VM:
             
             elif op == "MOVE":
                 self.regs[a] = self.regs[b]
+            
+            # spilling
+            elif op == "SPILL_STORE":
+                self.stack[a] = self.regs[b]
+
+            elif op == "SPILL_LOAD":
+                self.regs[a] = self.stack[b]
             
             # arithmetic
             elif op == "ADD":
