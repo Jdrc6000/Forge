@@ -7,8 +7,7 @@ from src.runtime.regalloc import linear_scan_allocate
 from src.runtime.vm import VM
 
 code = """
-a = (1+2) * (3+4) + 3
-print(a)
+a = ((1+2) * (3+4)) + 3 - ((1+2) * (3+4)) + 3
 """
 
 lexer = Lexer(code)
@@ -31,7 +30,7 @@ num_regs = 2
 allocated = linear_scan_allocate(ir_generator.ir.code, num_regs=num_regs)
 
 for i, instr in enumerate(allocated):
-    print(f"alloc{i} {instr.op} {instr.a} {instr.b} {instr.c}") #:04 to pad to 4 0's
+    print(f"realloc{i} {instr.op} {instr.a} {instr.b} {instr.c}") #:04 to pad to 4 0's
 
 vm = VM(num_regs=num_regs)
 vm.run(allocated)
@@ -942,10 +941,14 @@ class VM:
     
     def dump_regs(self): # simple dump debugger
         print(f"used regs: {len([reg for reg in self.regs if reg is not None])}")
+        print(f"used spills: {len(self.stack)}")
         
         for index, reg in enumerate(self.regs): # prints every used reg
-            if reg:
+            if reg is not None:
                 print(f"reg {index} {reg}")
+        
+        for index, spill in enumerate(self.stack): # prints every spill var in stack
+            print(f"spill {index} {spill}")
     
     def run(self, code):
         self.ip = 0

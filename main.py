@@ -1,6 +1,7 @@
 from src.frontend.lexer import Lexer
 from src.frontend.parser import Parser
 from src.semantic.analyser import Analyser, SymbolTable
+from src.optimiser.optimiser import Optimiser
 from src.ir.generator import IRGenerator
 from src.runtime.regalloc import linear_scan_allocate
 from src.runtime.vm import VM
@@ -21,11 +22,16 @@ symbol_table = SymbolTable()
 semantic_analysis = Analyser(symbol_table)
 semantic_analysis.analyse(tree)
 
+optimiser = Optimiser()
+tree = optimiser.optimize(tree)
+
+parser.dump(tree)
+
 ir_generator = IRGenerator()
 ir_generator.generate(tree)
 ir_generator.ir.dump()
 
-num_regs = 1
+num_regs = 2
 allocated = linear_scan_allocate(ir_generator.ir.code, num_regs=num_regs)
 
 for i, instr in enumerate(allocated):
