@@ -11,10 +11,14 @@ class VM:
     
     def dump_regs(self): # simple dump debugger
         print(f"used regs: {len([reg for reg in self.regs if reg is not None])}")
+        print(f"used spills: {len(self.stack)}")
         
         for index, reg in enumerate(self.regs): # prints every used reg
-            if reg:
+            if reg is not None:
                 print(f"reg {index} {reg}")
+        
+        for index, spill in enumerate(self.stack): # prints every spill var in stack
+            print(f"spill {index} {spill}")
     
     def run(self, code):
         self.ip = 0

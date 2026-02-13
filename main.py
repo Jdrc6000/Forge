@@ -6,8 +6,7 @@ from src.runtime.regalloc import linear_scan_allocate
 from src.runtime.vm import VM
 
 code = """
-a = (1+2) * (3+4) + 3
-print(a)
+a = ((1+2) * (3+4)) + 3 - ((1+2) * (3+4)) + 3
 """
 
 lexer = Lexer(code)
@@ -26,11 +25,11 @@ ir_generator = IRGenerator()
 ir_generator.generate(tree)
 ir_generator.ir.dump()
 
-num_regs = 2
+num_regs = 1
 allocated = linear_scan_allocate(ir_generator.ir.code, num_regs=num_regs)
 
 for i, instr in enumerate(allocated):
-    print(f"alloc{i} {instr.op} {instr.a} {instr.b} {instr.c}") #:04 to pad to 4 0's
+    print(f"realloc{i} {instr.op} {instr.a} {instr.b} {instr.c}") #:04 to pad to 4 0's
 
 vm = VM(num_regs=num_regs)
 vm.run(allocated)
