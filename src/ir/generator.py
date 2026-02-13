@@ -1,6 +1,7 @@
 from src.frontend.ast_nodes import *
 from src.frontend.tokens import *
 from src.ir.ir import IR
+from src.ir.operands import Imm
 
 class IRGenerator:
     def __init__(self):
@@ -16,7 +17,7 @@ class IRGenerator:
     
     def gen_Constant(self, node):
         r = self.ir.new_reg()
-        self.ir.emit("LOAD_CONST", r, node.value)
+        self.ir.emit("LOAD_CONST", r, Imm(node.value))
         return r
     
     def gen_Name(self, node):

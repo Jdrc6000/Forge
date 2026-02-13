@@ -28,33 +28,33 @@ class VM:
             op, a, b, c = instr.op, instr.a, instr.b, instr.c
             
             if op == "LOAD_CONST":
-                self.regs[a] = b
+                self.regs[a.id] = b.value
             
             elif op == "LOAD_VAR":
-                self.regs[a] = self.vars[b]
+                self.regs[a.id] = self.vars[b]
             
             elif op == "STORE_VAR":
-                self.vars[a] = self.regs[b]
+                self.vars[a] = self.regs[b.id]
             
             elif op == "PRINT":
-                print(self.regs[a])
+                print(self.regs[a.id])
             
             elif op == "JUMP":
                 self.ip = a
                 continue
             
             elif op == "JUMP_IF_TRUE":
-                if self.regs[a]:
+                if self.regs[a.id]:
                     self.ip = b
                     continue
             
             elif op == "JUMP_IF_FALSE":
-                if not self.regs[a]:
+                if not self.regs[a.id]:
                     self.ip = b
                     continue
             
             elif op == "MOVE":
-                self.regs[a] = self.regs[b]
+                self.regs[a.id] = self.regs[b.id]
             
             # spilling
             elif op == "SPILL_STORE":
@@ -65,44 +65,44 @@ class VM:
             
             # arithmetic
             elif op == "ADD":
-                self.regs[a] = self.regs[b] + self.regs[c]
+                self.regs[a.id] = self.regs[b.id] + self.regs[c.id]
 
             elif op == "SUB":
-                self.regs[a] = self.regs[b] - self.regs[c]
+                self.regs[a.id] = self.regs[b.id] - self.regs[c.id]
 
             elif op == "MUL":
-                self.regs[a] = self.regs[b] * self.regs[c]
+                self.regs[a.id] = self.regs[b.id] * self.regs[c.id]
 
             elif op == "DIV":
-                self.regs[a] = self.regs[b] / self.regs[c]
+                self.regs[a.id] = self.regs[b.id] / self.regs[c.id]
 
             elif op == "POW":
-                self.regs[a] = self.regs[b] ** self.regs[c]
+                self.regs[a.id] = self.regs[b.id] ** self.regs[c.id]
 
             elif op == "NEG":
-                self.regs[a] = -self.regs[b]
+                self.regs[a.id] = -self.regs[b.id]
 
             elif op == "NOT":
-                self.regs[a] = not self.regs[b]
+                self.regs[a.id] = not self.regs[b.id]
 
             # comparisons
             elif op == "EQ":
-                self.regs[a] = self.regs[b] == self.regs[c]
+                self.regs[a.id] = self.regs[b.id] == self.regs[c.id]
 
             elif op == "NE":
-                self.regs[a] = self.regs[b] != self.regs[c]
+                self.regs[a.id] = self.regs[b.id] != self.regs[c.id]
 
             elif op == "LT":
-                self.regs[a] = self.regs[b] < self.regs[c]
+                self.regs[a.id] = self.regs[b.id] < self.regs[c.id]
 
             elif op == "GT":
-                self.regs[a] = self.regs[b] > self.regs[c]
+                self.regs[a.id] = self.regs[b.id] > self.regs[c.id]
 
             elif op == "LE":
-                self.regs[a] = self.regs[b] <= self.regs[c]
+                self.regs[a.id] = self.regs[b.id] <= self.regs[c.id]
 
             elif op == "GE":
-                self.regs[a] = self.regs[b] >= self.regs[c]
+                self.regs[a.id] = self.regs[b.id] >= self.regs[c.id]
 
             else:
                 raise RuntimeError(f"Unknown opcode {op}")

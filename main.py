@@ -1,3 +1,5 @@
+from time import time
+
 from src.frontend.lexer import Lexer
 from src.frontend.parser import Parser
 from src.semantic.analyser import Analyser, SymbolTable
@@ -8,7 +10,12 @@ from src.runtime.vm import VM
 
 code = """
 a = ((1+2) * (3+4)) + 3 - ((1+2) * (3+4)) + 3
+print(5)
+if a == 5:
+    print("yes")
 """
+
+start = time()
 
 lexer = Lexer(code)
 tokens = lexer.get_tokens()
@@ -40,3 +47,5 @@ for i, instr in enumerate(allocated):
 vm = VM(num_regs=num_regs)
 vm.run(allocated)
 vm.dump_regs()
+
+print(f"took {time() - start} secs")

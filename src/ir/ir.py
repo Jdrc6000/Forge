@@ -1,12 +1,13 @@
+from src.ir.operands import Reg, Imm
 from dataclasses import dataclass
 from typing import Any, List
 
-@dataclass()
+@dataclass
 class Instr:
     op: str
-    a: Any = None
-    b: Any = None
-    c: Any = None
+    a: Reg | Imm | None = None
+    b: Reg | Imm | None = None
+    c: Reg | Imm | None = None
 
 class IR:
     def __init__(self):
@@ -14,7 +15,7 @@ class IR:
         self.reg = 0
     
     def new_reg(self):
-        r = self.reg
+        r = Reg(self.reg)
         self.reg += 1
         return r
     
@@ -23,5 +24,12 @@ class IR:
     
     # ast-dump had a child!!
     def dump(self):
+        def fmt(x):
+            if isinstance(x, Reg):
+                return f"r{x.id}"
+            if isinstance(x, Imm):
+                return x.value
+            return x
+        
         for i, instr in enumerate(self.code):
-            print(f"{i} {instr.op} {instr.a} {instr.b} {instr.c}") #:04 to pad to 4 0's
+            print(f"{i} {instr.op} {fmt(instr.a)} {fmt(instr.b)} {fmt(instr.c)}") #:04 to pad to 4 0's

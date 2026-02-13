@@ -1,4 +1,5 @@
 from src.ir.ir import Instr
+from src.ir.operands import Reg
 from collections import namedtuple
 
 # Live range structure
@@ -39,7 +40,7 @@ def compute_live_ranges(code):
     for i, instr in enumerate(code):
         defs, uses = get_defs_uses(instr)
         for r in defs + uses:
-            if isinstance(r, int):
+            if isinstance(r, Reg):
                 first.setdefault(r, i)
                 last[r] = i
 
@@ -92,7 +93,14 @@ def linear_scan_allocate(code, num_regs):
         r.phys = free_regs.pop(0)
         active.append(r)
         active.sort(key=lambda x: x.end)
-
+    
+    def rewrite_operand(op):
+        if isinstance(op, Reg):
+            lr = range_map[op]      # lookup virtual Reg object
+            if lr.phys is not None:
+                return Reg(lr.phys)
+        return op
+    
     # Rewrite registers in a new IR list
     mapping = {r.reg: r.phys for r in ranges}
     range_map = {r.reg: r for r in ranges}
@@ -108,9 +116,9 @@ def linear_scan_allocate(code, num_regs):
 
         new_instr = Instr(
             instr.op,
-            mapping.get(instr.a, instr.a),
-            mapping.get(instr.b, instr.b),
-            mapping.get(instr.c, instr.c)
+            rewrite_operand(instr.a),
+            rewrite_operand(instr.b),
+            rewrite_operand(instr.c)
         )
 
         new_code.append(new_instr)

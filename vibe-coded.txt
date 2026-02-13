@@ -1,14 +1,22 @@
 --- main.py ---
+from time import time
+
 from src.frontend.lexer import Lexer
 from src.frontend.parser import Parser
 from src.semantic.analyser import Analyser, SymbolTable
+from src.optimiser.optimiser import Optimiser
 from src.ir.generator import IRGenerator
 from src.runtime.regalloc import linear_scan_allocate
 from src.runtime.vm import VM
 
 code = """
 a = ((1+2) * (3+4)) + 3 - ((1+2) * (3+4)) + 3
+print(5)
+if a == 5:
+    print("yes")
 """
+
+start = time()
 
 lexer = Lexer(code)
 tokens = lexer.get_tokens()
@@ -21,6 +29,11 @@ parser.dump(tree)
 symbol_table = SymbolTable()
 semantic_analysis = Analyser(symbol_table)
 semantic_analysis.analyse(tree)
+
+optimiser = Optimiser()
+tree = optimiser.optimize(tree)
+
+parser.dump(tree)
 
 ir_generator = IRGenerator()
 ir_generator.generate(tree)
@@ -35,6 +48,8 @@ for i, instr in enumerate(allocated):
 vm = VM(num_regs=num_regs)
 vm.run(allocated)
 vm.dump_regs()
+
+print(f"took {time() - start} secs")
 
 --- src/frontend/ast_nodes.py ---
 from dataclasses import dataclass
@@ -650,6 +665,7 @@ class Token():
 from src.frontend.ast_nodes import *
 from src.frontend.tokens import *
 from src.ir.ir import IR
+from src.ir.operands import Imm
 
 class IRGenerator:
     def __init__(self):
@@ -665,7 +681,7 @@ class IRGenerator:
     
     def gen_Constant(self, node):
         r = self.ir.new_reg()
-        self.ir.emit("LOAD_CONST", r, node.value)
+        self.ir.emit("LOAD_CONST", r, Imm(node.value))
         return r
     
     def gen_Name(self, node):
@@ -773,6 +789,7 @@ class IRGenerator:
         return dest
 
 --- src/ir/ir.py ---
+from src.ir.operands import Reg, Imm
 from dataclasses import dataclass
 from typing import Any, List
 
@@ -789,7 +806,7 @@ class IR:
         self.reg = 0
     
     def new_reg(self):
-        r = self.reg
+        r = Reg(self.reg)
         self.reg += 1
         return r
     
@@ -798,11 +815,112 @@ class IR:
     
     # ast-dump had a child!!
     def dump(self):
+        def fmt(x):
+            if isinstance(x, Reg):
+                return f"r{x.id}"
+            if isinstance(x, Imm):
+                return x.value
+            return x
+        
         for i, instr in enumerate(self.code):
-            print(f"{i} {instr.op} {instr.a} {instr.b} {instr.c}") #:04 to pad to 4 0's
+            print(f"{i} {instr.op} {fmt(instr.a)} {fmt(instr.b)} {fmt(instr.c)}") #:04 to pad to 4 0's
+
+--- src/ir/operands.py ---
+from dataclasses import dataclass
+from typing import Any
+
+@dataclass(frozen=True)
+class Reg:
+    id: int
+
+@dataclass(frozen=True)
+class Imm:
+    value: Any
+
+--- src/optimiser/optimiser.py ---
+from src.optimiser.passes import ConstantFolder, DeadCodeEliminator
+
+class Optimiser:
+    def __init__(self):
+        self.passes = [
+            ConstantFolder(),
+            DeadCodeEliminator(),
+        ]
+
+    def optimize(self, tree):
+        for p in self.passes:
+            tree = p.run(tree)
+        return tree
+
+--- src/optimiser/passes.py ---
+from src.frontend.ast_nodes import Constant, BinOp, UnOp, If
+
+class Pass:
+    def run(self, node):
+        method = f"visit_{type(node).__name__}"
+        return getattr(self, method, self.generic)(node)
+
+    def generic(self, node):
+        for field, value in vars(node).items():
+            if isinstance(value, list):
+                setattr(node, field, [self.run(v) for v in value])
+            elif hasattr(value, "__dict__"):
+                setattr(node, field, self.run(value))
+        return node
+
+class ConstantFolder(Pass):
+    def visit_BinOp(self, node):
+        node.left = self.run(node.left)
+        node.right = self.run(node.right)
+        
+        if isinstance(node.left, Constant) and isinstance(node.right, Constant):
+            l = node.left.value
+            r = node.right.value
+            
+            if node.op == "+": return Constant(l + r)
+            if node.op == "-": return Constant(l - r)
+            if node.op == "*": return Constant(l * r)
+            if node.op == "/": return Constant(l / r)
+            if node.op == "^": return Constant(l ** r)
+            if node.op == "and": return Constant(l and r)
+            if node.op == "or": return Constant(l or r)
+        
+        return node
+    
+    def visit_UnOp(self, node):
+        node.operand = self.run(node.operand)
+        
+        if isinstance(node.operand, Constant):
+            val = node.operand.value
+            
+            if node.op == "-":
+                return Constant(-val)
+            
+            if node.op == "not":
+                return Constant(not val)
+        
+        return node
+
+class DeadCodeEliminator(Pass):
+    def visit_If(self, node):
+        node.test = self.run(node.test)
+        
+        if isinstance(node.test, Constant):
+            if node.test.value:
+                return [self.run(stmt) for stmt in node.body]
+            else:
+                return [self.run(stmt) for stmt in (node.orelse or [])]
+        
+        node.body = [self.run(s) for s in node.body]
+        
+        if node.orelse:
+            node.orelse = [self.run(s) for s in node.orelse]
+        
+        return node
 
 --- src/runtime/regalloc.py ---
 from src.ir.ir import Instr
+from src.ir.operands import Reg
 from collections import namedtuple
 
 # Live range structure
@@ -843,7 +961,7 @@ def compute_live_ranges(code):
     for i, instr in enumerate(code):
         defs, uses = get_defs_uses(instr)
         for r in defs + uses:
-            if isinstance(r, int):
+            if isinstance(r, Reg):
                 first.setdefault(r, i)
                 last[r] = i
 
@@ -896,7 +1014,12 @@ def linear_scan_allocate(code, num_regs):
         r.phys = free_regs.pop(0)
         active.append(r)
         active.sort(key=lambda x: x.end)
-
+    
+    def rewrite_operand(op):
+        if isinstance(op, Reg):
+            return Reg(mapping[op.id])
+        return op
+    
     # Rewrite registers in a new IR list
     mapping = {r.reg: r.phys for r in ranges}
     range_map = {r.reg: r for r in ranges}
@@ -912,9 +1035,9 @@ def linear_scan_allocate(code, num_regs):
 
         new_instr = Instr(
             instr.op,
-            mapping.get(instr.a, instr.a),
-            mapping.get(instr.b, instr.b),
-            mapping.get(instr.c, instr.c)
+            rewrite_operand(instr.a),
+            rewrite_operand(instr.b),
+            rewrite_operand(instr.c)
         )
 
         new_code.append(new_instr)
@@ -958,7 +1081,7 @@ class VM:
             op, a, b, c = instr.op, instr.a, instr.b, instr.c
             
             if op == "LOAD_CONST":
-                self.regs[a] = b
+                self.regs[a.id] = b.value
             
             elif op == "LOAD_VAR":
                 self.regs[a] = self.vars[b]
