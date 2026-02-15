@@ -60,12 +60,32 @@ class IRGenerator:
         else:
             self.ir.code[jmp_false].b = len(self.ir.code)
     
+    # here be dragons
+    # honestly tho, i havent a clue whats going on, but all i know
+    # is that you can now do:
+    #   a < b < c
     def gen_Compare(self, node):
         left = self.generate(node.left)
-        right = self.generate(node.comparators[0])
-        dest = self.ir.new_reg()
-        self.ir.emit(cmp[node.op], dest, left, right)
-        return dest
+
+        result = None
+        current_left = left
+
+        for comp in node.comparators:
+            right = self.generate(comp)
+            dest = self.ir.new_reg()
+            self.ir.emit(cmp[node.op], dest, current_left, right)
+
+            if result is None:
+                result = dest
+            else:
+                # combine with AND
+                tmp = self.ir.new_reg()
+                self.ir.emit("AND", tmp, result, dest)
+                result = tmp
+
+            current_left = right
+
+        return result
     
     # binop the goat for using less regs
     def gen_BinOp(self, node):
@@ -75,14 +95,12 @@ class IRGenerator:
 
         # generate left first
         left = self.generate(node.left)
-        # generate right
         right = self.generate(node.right)
 
         # reuse left register as destination
         dest = left
         self.ir.emit(binops[node.op], dest, left, right)
         return dest
-
     
     def gen_logic(self, node):
         left = self.generate(node.left)
@@ -100,7 +118,7 @@ class IRGenerator:
 
             self.ir.code[jmp].b = len(self.ir.code)
 
-        else:  # OR
+        else: # or
             jmp = len(self.ir.code)
             self.ir.emit("JUMP_IF_TRUE", dest, None)
 

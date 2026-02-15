@@ -213,12 +213,15 @@ class Parser():
         if tok.type == "INT" or tok.type == "FLOAT":
             self.advance()
             return Constant(tok.value)
+        
         elif tok.type == "STRING":
             self.advance()
             return Constant(tok.value)
+        
         elif tok.type == "NAME":
             self.advance()
             return Name(tok.value)
+
         elif tok.type == "LPAREN":
             self.advance()
             expr = self.parse_expr()
@@ -228,6 +231,15 @@ class Parser():
             self.advance()
             
             return expr
+        
+        elif tok.type == "TRUE":
+            self.advance()
+            return Constant(True)
+
+        elif tok.type == "FALSE":
+            self.advance()
+            return Constant(False)
+        
         else:
             raise Exception(f"Unexpected token: {tok}")
     

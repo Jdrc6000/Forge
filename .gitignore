@@ -2,3 +2,5 @@ __pycache__/
 *.pyc
 venv/
 .env
+__init__.py
+vibe-coded.txt

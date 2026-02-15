@@ -8,6 +8,8 @@ from src.ir.generator import IRGenerator
 from src.runtime.regalloc import linear_scan_allocate
 from src.runtime.vm import VM
 
+from src.ir.operands import Reg, Imm
+
 code = """
 a = ((1+2) * (3+4)) + 3 - ((1+2) * (3+4)) + 3
 print(5)
@@ -41,8 +43,14 @@ ir_generator.ir.dump()
 num_regs = 2
 allocated = linear_scan_allocate(ir_generator.ir.code, num_regs=num_regs)
 
+def fmt(x):
+    if isinstance(x, Reg):
+        return f"r{x.id}"
+    if isinstance(x, Imm):
+        return x.value
+    return x
 for i, instr in enumerate(allocated):
-    print(f"realloc{i} {instr.op} {instr.a} {instr.b} {instr.c}") #:04 to pad to 4 0's
+    print(f"realloc{i} {instr.op} {fmt(instr.a)} {fmt(instr.b)} {fmt(instr.c)}") #:04 to pad to 4 0's
 
 vm = VM(num_regs=num_regs)
 vm.run(allocated)

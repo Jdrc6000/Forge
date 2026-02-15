@@ -1,1 +1,1 @@
-# Gengo
+# 言語 (gengo)

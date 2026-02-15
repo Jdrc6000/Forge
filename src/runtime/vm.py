@@ -17,8 +17,8 @@ class VM:
             if reg is not None:
                 print(f"reg {index} {reg}")
         
-        for index, spill in enumerate(self.stack): # prints every spill var in stack
-            print(f"spill {index} {spill}")
+        for slot, value in self.stack.items(): # prints every spill var in stack
+            print(f"spill {slot} {value}")
     
     def run(self, code):
         self.ip = 0
@@ -103,6 +103,9 @@ class VM:
 
             elif op == "GE":
                 self.regs[a.id] = self.regs[b.id] >= self.regs[c.id]
+            
+            elif op == "AND":
+                self.regs[a.id] = self.regs[b.id] and self.regs[c.id]
 
             else:
                 raise RuntimeError(f"Unknown opcode {op}")

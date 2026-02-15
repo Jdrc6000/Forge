@@ -29,6 +29,9 @@ tt_print = "PRINT"
 tt_and = "AND"
 tt_or = "OR"
 tt_not = "NOT"
+tt_true = "TRUE"
+tt_false = "FALSE"
+
 
 keywords = {
     "if": tt_if,
@@ -36,7 +39,9 @@ keywords = {
     "print": tt_print,
     "and": tt_and,
     "or": tt_or,
-    "not": tt_not
+    "not": tt_not,
+    "true": tt_true,
+    "false": tt_false
 }
 
 single_char_tokens = {

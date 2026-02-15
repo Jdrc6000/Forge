@@ -8,9 +8,19 @@ class Pass:
     def generic(self, node):
         for field, value in vars(node).items():
             if isinstance(value, list):
-                setattr(node, field, [self.run(v) for v in value])
+                new_list = []
+                for v in value:
+                    result = self.run(v)
+                    if isinstance(result, list):
+                        new_list.extend(result)
+                    else:
+                        new_list.append(result)
+                setattr(node, field, new_list)
+
             elif hasattr(value, "__dict__"):
-                setattr(node, field, self.run(value))
+                result = self.run(value)
+                setattr(node, field, result)
+
         return node
 
 class ConstantFolder(Pass):
@@ -44,6 +54,23 @@ class ConstantFolder(Pass):
             if node.op == "not":
                 return Constant(not val)
         
+        return node
+    
+    def visit_Compare(self, node):
+        node.left = self.run(node.left)
+        node.comparators = [self.run(c) for c in node.comparators]
+
+        if isinstance(node.left, Constant) and isinstance(node.comparators[0], Constant):
+            l = node.left.value
+            r = node.comparators[0].value
+
+            if node.op == "EE": return Constant(l == r)
+            if node.op == "NE": return Constant(l != r)
+            if node.op == "LESS": return Constant(l < r)
+            if node.op == "GREATER": return Constant(l > r)
+            if node.op == "LE": return Constant(l <= r)
+            if node.op == "GE": return Constant(l >= r)
+
         return node
 
 class DeadCodeEliminator(Pass):

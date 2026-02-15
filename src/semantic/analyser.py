@@ -20,6 +20,7 @@ class Analyser():
         elif isinstance(node, Call):
             for arg in node.args:
                 self.analyse(arg)
+            
             return None
         
         # unused?
@@ -33,13 +34,20 @@ class Analyser():
         elif isinstance(node, Name):
             if not self.symbols.exists(node.id):
                 raise Exception(f"Undefined variable '{node.id}'")
+            
             return self.symbols.get(node.id)["type"]
         
         elif isinstance(node, Constant):
             value = node.value
+            
             if isinstance(value, str):
                 node.inferred_type = STRING
                 return STRING
+            
+            elif isinstance(value, bool):
+                node.inferred_type = BOOL
+                return BOOL
+            
             elif isinstance(value, (float, int)):
                 node.inferred_type = NUMBER
                 return NUMBER
@@ -49,9 +57,7 @@ class Analyser():
             right = self.analyse(node.right)
 
             if not left.supports_binary(node.op, right):
-                raise TypeError(
-                    f"Operator '{node.op}' not supported between {left} and {right}"
-                )
+                raise TypeError(f"Operator '{node.op}' not supported between {left} and {right}")
 
             node.inferred_type = left
             return left

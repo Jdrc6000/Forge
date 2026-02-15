@@ -76,11 +76,9 @@ def linear_scan_allocate(code, num_regs):
             victim = pick_spill(active, r)
 
             if victim is r:
-                # spill the new range immediately
                 r.slot = next_slot
                 next_slot += 1
-                r.phys = free_regs.pop(0)
-                active.append(r)
+                r.phys = None
                 continue
             else:
                 # spill an active range
@@ -102,7 +100,6 @@ def linear_scan_allocate(code, num_regs):
         return op
     
     # Rewrite registers in a new IR list
-    mapping = {r.reg: r.phys for r in ranges}
     range_map = {r.reg: r for r in ranges}
     for instr in code:
 
@@ -110,6 +107,8 @@ def linear_scan_allocate(code, num_regs):
 
         # reload uses
         for u in uses:
+            if not isinstance(u, Reg):
+                continue
             lr = range_map[u]
             if lr.slot is not None:
                 new_code.append(Instr("SPILL_LOAD", lr.phys, lr.slot))
@@ -125,6 +124,8 @@ def linear_scan_allocate(code, num_regs):
 
         # spill defs
         for d in defs:
+            if not isinstance(d, Reg):
+                continue
             lr = range_map[d]
             if lr.slot is not None:
                 new_code.append(Instr("SPILL_STORE", lr.slot, lr.phys))
