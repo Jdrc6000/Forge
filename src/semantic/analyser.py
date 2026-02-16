@@ -56,6 +56,15 @@ class Analyser():
             left = self.analyse(node.left)
             right = self.analyse(node.right)
 
+            # if left is unknown, adopt right's type
+            if isinstance(left, UnknownType):
+                left = right
+                node.left.inferred_type = right
+
+            if isinstance(right, UnknownType):
+                right = left
+                node.right.inferred_type = left
+
             if not left.supports_binary(node.op, right):
                 raise TypeError(f"Operator '{node.op}' not supported between {left} and {right}")
 
@@ -83,6 +92,16 @@ class Analyser():
 
             node.inferred_type = BOOL
             return BOOL
-    
+
+        elif isinstance(node, FunctionDef):
+            self.symbols.define(node.name, "function")
+            
+            #self.symbols.enter_scope() # lets just pretend this exists
+            for arg in node.args:
+                self.symbols.define(arg, UNKNOWN)
+            for stmt in node.body:
+                self.analyse(stmt)
+            #self.symbols.exit_scope()
+        
         else:
             return None

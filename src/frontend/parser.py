@@ -40,8 +40,15 @@ class Parser():
             return self.parse_print()
         elif self.current_token.type == "IF":
             return self.parse_if()
-        elif self.current_token.type == "NAME" and self.peek() and self.peek().type == "EQ":
-            return self.parse_assign()
+        elif self.current_token.type == "NAME":
+            if self.peek() and self.peek().type == "LPAREN":
+                return self.parse_call()
+            elif self.peek() and self.peek().type == "EQ":
+                return self.parse_assign()
+            else:
+                return Expr(Name(self.current_token.value))
+        elif self.current_token.type == "FN":
+            return self.parse_function()
         else:
             return Expr(self.parse_expr())
     
@@ -224,12 +231,14 @@ class Parser():
 
         elif tok.type == "LPAREN":
             self.advance()
-            expr = self.parse_expr()
+            if self.current_token.type == "RPAREN":
+                expr = Constant(None)
+            else:
+                expr = self.parse_expr()
             
             if self.current_token.type != "RPAREN":
-                raise Exception("Expected ')'")
+                raise Exception("Expected ')' after expression")
             self.advance()
-            
             return expr
         
         elif tok.type == "TRUE":
@@ -242,6 +251,78 @@ class Parser():
         
         else:
             raise Exception(f"Unexpected token: {tok}")
+    
+    def parse_function(self):
+        self.advance() # skip fn
+        
+        if self.current_token.type != "NAME":
+            raise Exception("Expected function name")
+        func_name = self.current_token.value
+        self.advance()
+        
+        if self.current_token.type != "LPAREN":
+            raise Exception("Expected '(' after function name")
+        self.advance()  # skip '('
+
+        # parse argument names (can be empty)
+        args = []
+        if self.current_token.type != "RPAREN":
+            while True:
+                if self.current_token.type != "NAME":
+                    raise Exception("Expected argument name")
+                args.append(self.current_token.value)
+                self.advance()
+                if self.current_token.type == "RPAREN":
+                    break
+                elif self.current_token.type == "COMMA":
+                    self.advance()
+                else:
+                    raise Exception("Expected ',' or ')' in argument list")
+
+        self.advance()  # skip )
+        
+        if self.current_token.type != "COLON":
+            raise Exception("Expected ':' after function header")
+        self.advance()
+        
+        if self.current_token.type != "NEWLINE":
+            raise Exception("Expected newline after ':'")
+        self.advance()
+        
+        if self.current_token.type != "INDENT":
+            raise Exception("Expected indent in function body")
+        self.advance()
+        
+        body = []
+        while self.current_token.type != "DEDENT":
+            self.skip_newlines()
+            if self.current_token.type == "DEDENT":
+                break
+            body.append(self.statement())
+        
+        self.advance()
+        return FunctionDef(func_name, args, body)
+    
+    def parse_call(self):
+        func_name = self.current_token.value
+        self.advance()  # skip function name
+
+        if self.current_token.type != "LPAREN":
+            raise Exception("Expected '(' in function call")
+        self.advance()  # skip '('
+
+        args = []
+        if self.current_token.type != "RPAREN":
+            while True:
+                args.append(self.parse_expr())
+                if self.current_token.type == "COMMA":
+                    self.advance()
+                elif self.current_token.type == "RPAREN":
+                    break
+                else:
+                    raise Exception("Expected ',' or ')' in argument list")
+        self.advance()  # skip ')'
+        return Call(Name(func_name), args)
     
     def token_to_op(self, token):
         mapping = {

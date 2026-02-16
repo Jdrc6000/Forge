@@ -52,3 +52,9 @@ class Compare(AST):
     left: AST
     op: str
     comparators: List[AST]
+
+@dataclass
+class FunctionDef(AST):
+    name: str
+    args: list[str]
+    body: list[AST]

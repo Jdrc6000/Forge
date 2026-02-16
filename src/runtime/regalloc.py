@@ -119,6 +119,12 @@ def linear_scan_allocate(code, num_regs):
             rewrite_operand(instr.b),
             rewrite_operand(instr.c)
         )
+        
+        # Carry over CALL/LABEL metadata, rewriting virtual regs in arg_regs
+        if hasattr(instr, 'arg_regs'):
+            new_instr.arg_regs = [rewrite_operand(r) for r in instr.arg_regs]
+        if hasattr(instr, 'param_names'):
+            new_instr.param_names = instr.param_names
 
         new_code.append(new_instr)
 

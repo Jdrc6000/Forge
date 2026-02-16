@@ -45,6 +45,10 @@ class UnknownType(Type):
 
     def is_compatible(self, other: "Type") -> bool:
         return True
+    
+    def supports_binary(self, op: str, other: "Type") -> bool:
+        # allow the operation and "become" the other type
+        return True
 
 NUMBER = NumberType()
 STRING = StringType()

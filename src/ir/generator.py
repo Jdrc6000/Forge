@@ -1,6 +1,6 @@
 from src.frontend.ast_nodes import *
 from src.frontend.tokens import *
-from src.ir.ir import IR
+from src.ir.ir import IR, Instr
 from src.ir.operands import Imm
 
 class IRGenerator:
@@ -12,8 +12,27 @@ class IRGenerator:
         return getattr(self, method)(node)
     
     def gen_Module(self, node):
+        self.ir.emit("LABEL", "__main__")
+        
+        # first generate top-level statements
         for stmt in node.body:
-            self.generate(stmt)
+            if not isinstance(stmt, FunctionDef):
+                self.generate(stmt)
+
+        # jump over function definitions so we don't fall into them
+        jmp = len(self.ir.code)
+        self.ir.emit("JUMP", None)
+
+        # then generate function definitions
+        for stmt in node.body:
+            if isinstance(stmt, FunctionDef):
+                self.generate(stmt)
+        
+        # patch the jump to land here (after all functions)
+        self.ir.code[jmp].a = len(self.ir.code)
+    
+    def gen_Expr(self, node):
+        return self.generate(node.value)
     
     def gen_Constant(self, node):
         r = self.ir.new_reg()
@@ -30,12 +49,17 @@ class IRGenerator:
         self.ir.emit("STORE_VAR", node.target.id, value_reg)
     
     def gen_Call(self, node):
-        arg_regs = [self.generate(a) for a in node.args]
-
         if node.func.id == "print":
+            arg_regs = [self.generate(a) for a in node.args]
             self.ir.emit("PRINT", arg_regs[0])
+            return None
         else:
-            self.ir.emit("CALL", node.func.id)
+            arg_regs = [self.generate(a) for a in node.args]
+            instr = Instr("CALL", node.func.id)
+            instr.arg_regs = arg_regs
+            instr.param_names = []  # will be resolved at runtime from FunctionDef label
+            self.ir.code.append(instr)
+            return None
     
     # uses backpatching
     def gen_If(self, node):
@@ -73,7 +97,12 @@ class IRGenerator:
         for comp in node.comparators:
             right = self.generate(comp)
             dest = self.ir.new_reg()
-            self.ir.emit(cmp[node.op], dest, current_left, right)
+            
+            # safeguards against idiots using wrongs ops (me)
+            opcode = cmp.get(node.op)
+            if not opcode:
+                raise RuntimeError(f"Unsupported comparison {node.op}")
+            self.ir.emit(opcode, dest, left, right)
 
             if result is None:
                 result = dest
@@ -141,3 +170,14 @@ class IRGenerator:
             self.ir.emit("MOVE", dest, src)
 
         return dest
+    
+    def gen_FunctionDef(self, node):
+        instr = Instr("LABEL", node.name)
+        instr.param_names = node.args  # store ["test_arg", ...]
+        self.ir.code.append(instr)
+        
+        for stmt in node.body:
+            self.generate(stmt)
+        
+        self.ir.emit("LOAD_CONST", self.ir.new_reg(), Imm(0))
+        self.ir.emit("RETURN")

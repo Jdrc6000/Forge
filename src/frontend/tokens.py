@@ -31,7 +31,7 @@ tt_or = "OR"
 tt_not = "NOT"
 tt_true = "TRUE"
 tt_false = "FALSE"
-
+tt_fn = "FN"
 
 keywords = {
     "if": tt_if,
@@ -41,7 +41,8 @@ keywords = {
     "or": tt_or,
     "not": tt_not,
     "true": tt_true,
-    "false": tt_false
+    "false": tt_false,
+    "fn": tt_fn # functions
 }
 
 single_char_tokens = {

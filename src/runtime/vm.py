@@ -7,6 +7,8 @@ class VM:
         self.free_regs = list(range(self.num_regs))
         self.vars = {}
         self.stack = {}
+        self.call_stack = [] # (ip, locals)
+        self.code = None # to be set in /main.py
         self.ip = 0 # instruction pointer
     
     def dump_regs(self): # simple dump debugger
@@ -19,6 +21,12 @@ class VM:
         
         for slot, value in self.stack.items(): # prints every spill var in stack
             print(f"spill {slot} {value}")
+    
+    def find_label(self, label_name): # for functions / gen calls
+        for i, instr in enumerate(self.code):
+            if instr.op == "LABEL" and instr.a == label_name:
+                return i
+        raise RuntimeError(f"Label not found: {label_name}")
     
     def run(self, code):
         self.ip = 0
@@ -38,6 +46,37 @@ class VM:
             
             elif op == "PRINT":
                 print(self.regs[a.id])
+            
+            elif op == "CALL":
+                self.call_stack.append((self.ip + 1, self.vars.copy()))
+                
+                target_ip = self.find_label(a)
+                self.ip = target_ip
+                self.vars = {}
+
+                # get param names from the LABEL instruction itself
+                label_instr = code[target_ip]
+                param_names = getattr(label_instr, "param_names", [])
+                arg_regs = getattr(instr, "arg_regs", [])
+
+                for name, reg in zip(param_names, arg_regs):
+                    self.vars[name] = self.regs[reg.id]
+
+                continue
+
+            elif op == "RETURN":
+                if self.call_stack:
+                    self.ip, caller_vars = self.call_stack.pop()
+                    self.vars = caller_vars
+                    continue
+                else:
+                    # top-level RETURN: just stop execution
+                    break
+            
+            elif op == "LABEL":
+                # its literally just a label...
+                # its meant to do nothing
+                pass
             
             elif op == "JUMP":
                 self.ip = a

@@ -6,6 +6,10 @@ class Pass:
         return getattr(self, method, self.generic)(node)
 
     def generic(self, node):
+        # safe guard against edge case #382
+        if not hasattr(node, "__dict__"):
+            return node
+        
         for field, value in vars(node).items():
             if isinstance(value, list):
                 new_list = []

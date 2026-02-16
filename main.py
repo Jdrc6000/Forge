@@ -11,10 +11,11 @@ from src.runtime.vm import VM
 from src.ir.operands import Reg, Imm
 
 code = """
-a = ((1+2) * (3+4)) + 3 - ((1+2) * (3+4)) + 3
-print(5)
-if a == 5:
-    print("yes")
+fn hello(name):
+    print("hello " + name + "!")
+
+hello("james")
+hello("patricia")
 """
 
 start = time()
@@ -33,14 +34,13 @@ semantic_analysis.analyse(tree)
 
 optimiser = Optimiser()
 tree = optimiser.optimize(tree)
-
 parser.dump(tree)
 
 ir_generator = IRGenerator()
 ir_generator.generate(tree)
 ir_generator.ir.dump()
 
-num_regs = 2
+num_regs = 1024
 allocated = linear_scan_allocate(ir_generator.ir.code, num_regs=num_regs)
 
 def fmt(x):
@@ -53,6 +53,9 @@ for i, instr in enumerate(allocated):
     print(f"realloc{i} {instr.op} {fmt(instr.a)} {fmt(instr.b)} {fmt(instr.c)}") #:04 to pad to 4 0's
 
 vm = VM(num_regs=num_regs)
+vm.code = allocated
+start_ip = vm.find_label("__main__")
+vm.ip = start_ip
 vm.run(allocated)
 vm.dump_regs()
 
