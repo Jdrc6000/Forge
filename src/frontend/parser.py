@@ -51,6 +51,8 @@ class Parser():
             return self.parse_function()
         elif self.current_token.type == "WHILE":
             return self.parse_while()
+        elif self.current_token.type == "FOR":
+            return self.parse_for()
         else:
             return Expr(self.parse_expr())
     
@@ -351,6 +353,48 @@ class Parser():
                     raise Exception("Expected ',' or ')' in argument list")
         self.advance()  # skip ')'
         return Call(Name(func_name), args)
+
+    def parse_for(self):
+        self.advance()  # skip 'for'
+
+        if self.current_token.type != "NAME":
+            raise Exception("Expected loop variable name")
+        loop_var = Name(self.current_token.value)
+        self.advance()
+
+        if self.current_token.type != "IN":
+            raise Exception("Expected 'in' in for loop")
+        self.advance()
+
+        start = self.parse_expr()
+
+        if self.current_token.type != "RANGE":
+            raise Exception("Expected '..' in for loop")
+        self.advance()
+
+        end = self.parse_expr()
+
+        if self.current_token.type != "COLON":
+            raise Exception("Expected ':' after for header")
+        self.advance()
+
+        if self.current_token.type != "NEWLINE":
+            raise Exception("Expected newline after ':'")
+        self.advance()
+
+        if self.current_token.type != "INDENT":
+            raise Exception("Expected indent in for body")
+        self.advance()
+
+        body = []
+        while self.current_token.type != "DEDENT":
+            self.skip_newlines()
+            if self.current_token.type == "DEDENT":
+                break
+            body.append(self.statement())
+
+        self.advance()  # consume DEDENT
+        return For(loop_var, start, end, body)
     
     def token_to_op(self, token):
         mapping = {
@@ -439,7 +483,24 @@ class Parser():
                 self.dump(arg, indent + 2)
             
             print(f"{pad}  Body:")
-            for something in node.body:
+            for something in node.body: # chat remind me to change this
+                self.dump(something, indent + 2)
+        
+        elif isinstance(node, While):
+            print(f"{pad}While")
+            self.dump(node.test, indent + 1)
+            
+            print(f"{pad}  Body:")
+            for something in node.body: # chat also remind me to change this
+                self.dump(something, indent + 2)
+        
+        elif isinstance(node, For):
+            print(f"{pad}For({node.target.id})")
+            self.dump(node.start, indent + 1)
+            self.dump(node.end, indent + 1)
+            
+            print(f"{pad}  Body:")
+            for something in node.body: # chat also also remind me to change this
                 self.dump(something, indent + 2)
         
         else:

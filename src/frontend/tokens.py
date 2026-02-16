@@ -33,6 +33,10 @@ tt_true = "TRUE"
 tt_false = "FALSE"
 tt_fn = "FN"
 tt_while = "WHILE"
+tt_for = "FOR"
+tt_dot = "."
+tt_in = "IN"
+tt_range = "RANGE"
 
 keywords = {
     "if": tt_if,
@@ -44,7 +48,9 @@ keywords = {
     "true": tt_true,
     "false": tt_false,
     "fn": tt_fn, # functions
-    "while": tt_while
+    "while": tt_while,
+    "for": tt_for,
+    "in": tt_in
 }
 
 single_char_tokens = {
@@ -60,7 +66,8 @@ single_char_tokens = {
     "<": tt_less,
     ">": tt_greater,
     ",": tt_comma,
-    ":": tt_colon
+    ":": tt_colon,
+    ".": tt_dot
 }
 
 binops = {

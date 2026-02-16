@@ -63,3 +63,10 @@ class FunctionDef(AST):
 class While(AST):
     test: AST
     body: list[AST]
+
+@dataclass
+class For(AST):
+    target: Name
+    start: AST
+    end: AST
+    body: list[AST]

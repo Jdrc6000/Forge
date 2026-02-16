@@ -11,12 +11,11 @@ from src.runtime.vm import VM
 from src.ir.operands import Reg, Imm
 
 code = """
-i = 3
-while i >= 1:
-    print(i)
-    i = i - 1
-
-print("GO!!")
+for i in 1..3:
+    if i == 2:
+        print("i is 2")
+    else:
+        print("i is not 2")
 """
 
 start = time()

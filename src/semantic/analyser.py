@@ -110,5 +110,17 @@ class Analyser():
             for stmt in node.body:
                 self.analyse(stmt)
         
+        elif isinstance(node, For):
+            start_type = self.analyse(node.start)
+            end_type = self.analyse(node.end)
+
+            if start_type != NUMBER or end_type != NUMBER:
+                raise TypeError("For loop start and end must be numbers")
+
+            self.symbols.define(node.target.id, NUMBER)
+
+            for stmt in node.body:
+                self.analyse(stmt)
+        
         else:
             return None

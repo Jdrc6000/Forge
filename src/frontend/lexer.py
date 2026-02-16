@@ -45,23 +45,35 @@ class Lexer():
     def number(self):
         num_str = ""
         dot_count = 0
-        
-        while self.current_char and (self.current_char.isdigit() or self.current_char == "."):
+        start_pos = self.pos  # optional: for better error messages
+
+        while self.current_char and self.current_char in "0123456789.":
             if self.current_char == ".":
-                if dot_count == 1:
-                    break
-                
                 dot_count += 1
-                num_str += "."
-            else:
-                num_str += self.current_char
-            
+                # Critical: if this is the first dot, peek ahead
+                if dot_count == 1:
+                    next_char = self.peek()
+                    next_next_char = self.text[self.pos + 2] if self.pos + 2 < len(self.text) else None
+                    # If we see . followed by another . → do NOT consume this dot as part of number
+                    if next_char == ".":
+                        break  # leave the .. for the range rule
+                    # Optional: also block trailing dot with no digit after (like 42.)
+                    if next_char is None or not next_char.isdigit():
+                        break
+
+            num_str += self.current_char
             self.advance()
-        
+
+        if not num_str:
+            raise Exception("Expected number")
+
         if dot_count == 0:
             return Token(tt_int, int(num_str))
-        else:
+        elif dot_count == 1 and num_str[-1] != ".":
             return Token(tt_float, float(num_str))
+        else:
+            # Optional: give better position info
+            raise Exception(f"Invalid number format near position {start_pos}: '{num_str}'")
     
     def string(self):
         string_val = ""
@@ -124,6 +136,11 @@ class Lexer():
             elif self.current_char == "<":
                 self.advance()
                 tokens.append(Token(tt_less))
+            
+            elif self.current_char == "." and self.peek() == ".":
+                self.advance()
+                self.advance()
+                tokens.append(Token(tt_range))
             
             elif self.current_char in single_char_tokens:
                 tok_type = single_char_tokens[self.current_char]

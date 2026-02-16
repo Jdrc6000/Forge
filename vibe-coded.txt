@@ -12,11 +12,8 @@ from src.runtime.vm import VM
 from src.ir.operands import Reg, Imm
 
 code = """
-fn hello(name):
-    print("hello " + name + "!")
-
-hello("james")
-hello("patricia")
+for i in 0..3:
+    print(i)
 """
 
 start = time()
@@ -124,6 +121,18 @@ class FunctionDef(AST):
     args: list[str]
     body: list[AST]
 
+@dataclass
+class While(AST):
+    test: AST
+    body: list[AST]
+
+@dataclass
+class For(AST):
+    target: Name
+    start: AST
+    end: AST
+    body: list[AST]
+
 --- src/frontend/lexer.py ---
 from src.frontend.tokens import *
 
@@ -229,6 +238,11 @@ class Lexer():
             elif self.current_char.isspace():
                 self.skip_whitespace()
             
+            elif self.current_char == "." and self.peek() == ".":
+                self.advance()
+                self.advance()
+                tokens.append(Token(tt_range))
+            
             elif self.current_char == "!" and self.peek() == "=":
                 self.advance()
                 self.advance()
@@ -328,6 +342,10 @@ class Parser():
                 return Expr(Name(self.current_token.value))
         elif self.current_token.type == "FN":
             return self.parse_function()
+        elif self.current_token.type == "WHILE":
+            return self.parse_while()
+        elif self.current_token.type == "FOR":
+            return self.parse_for()
         else:
             return Expr(self.parse_expr())
     
@@ -582,6 +600,32 @@ class Parser():
         self.advance()
         return FunctionDef(func_name, args, body)
     
+    def parse_while(self):
+        self.advance()  # skip 'while'
+        test = self.parse_expr()
+
+        if self.current_token.type != "COLON":
+            raise Exception("Expected ':' after while condition")
+        self.advance()
+
+        if self.current_token.type != "NEWLINE":
+            raise Exception("Expected newline after ':'")
+        self.advance()
+
+        if self.current_token.type != "INDENT":
+            raise Exception("Expected indent in while body")
+        self.advance()
+
+        body = []
+        while self.current_token.type != "DEDENT":
+            self.skip_newlines()
+            if self.current_token.type == "DEDENT":
+                break
+            body.append(self.statement())
+
+        self.advance()  # consume DEDENT
+        return While(test, body)
+    
     def parse_call(self):
         func_name = self.current_token.value
         self.advance()  # skip function name
@@ -602,6 +646,48 @@ class Parser():
                     raise Exception("Expected ',' or ')' in argument list")
         self.advance()  # skip ')'
         return Call(Name(func_name), args)
+
+    def parse_for(self):
+        self.advance()  # skip 'for'
+
+        if self.current_token.type != "NAME":
+            raise Exception("Expected loop variable name")
+        loop_var = Name(self.current_token.value)
+        self.advance()
+
+        if self.current_token.type != "IN":
+            raise Exception("Expected 'in' in for loop")
+        self.advance()
+
+        start = self.parse_expr()
+
+        if self.current_token.type != "RANGE":
+            raise Exception("Expected '..' in for loop")
+        self.advance()
+
+        end = self.parse_expr()
+
+        if self.current_token.type != "COLON":
+            raise Exception("Expected ':' after for header")
+        self.advance()
+
+        if self.current_token.type != "NEWLINE":
+            raise Exception("Expected newline after ':'")
+        self.advance()
+
+        if self.current_token.type != "INDENT":
+            raise Exception("Expected indent in for body")
+        self.advance()
+
+        body = []
+        while self.current_token.type != "DEDENT":
+            self.skip_newlines()
+            if self.current_token.type == "DEDENT":
+                break
+            body.append(self.statement())
+
+        self.advance()  # consume DEDENT
+        return For(loop_var, start, end, body)
     
     def token_to_op(self, token):
         mapping = {
@@ -690,7 +776,15 @@ class Parser():
                 self.dump(arg, indent + 2)
             
             print(f"{pad}  Body:")
-            for something in node.body:
+            for something in node.body: # chat remind me to change this
+                self.dump(something, indent + 2)
+        
+        elif isinstance(node, While):
+            print(f"{pad}While")
+            self.dump(node.test, indent + 1)
+            
+            print(f"{pad}  Body:")
+            for something in node.body: # chat also remind me to change this
                 self.dump(something, indent + 2)
         
         else:
@@ -731,6 +825,11 @@ tt_not = "NOT"
 tt_true = "TRUE"
 tt_false = "FALSE"
 tt_fn = "FN"
+tt_while = "WHILE"
+tt_for = "FOR"
+tt_dot = "."
+tt_in = "IN"
+tt_range = "RANGE"
 
 keywords = {
     "if": tt_if,
@@ -741,7 +840,10 @@ keywords = {
     "not": tt_not,
     "true": tt_true,
     "false": tt_false,
-    "fn": tt_fn # functions
+    "fn": tt_fn, # functions
+    "while": tt_while,
+    "for": tt_for,
+    "in": tt_in
 }
 
 single_char_tokens = {
@@ -757,7 +859,8 @@ single_char_tokens = {
     "<": tt_less,
     ">": tt_greater,
     ",": tt_comma,
-    ":": tt_colon
+    ":": tt_colon,
+    ".": tt_dot
 }
 
 binops = {
@@ -971,6 +1074,57 @@ class IRGenerator:
         
         self.ir.emit("LOAD_CONST", self.ir.new_reg(), Imm(0))
         self.ir.emit("RETURN")
+    
+    def gen_While(self, node):
+        start_label = len(self.ir.code)       # start of loop
+        test_reg = self.generate(node.test)
+
+        jmp_exit = len(self.ir.code)
+        self.ir.emit("JUMP_IF_FALSE", test_reg, None)  # exit if false
+
+        for stmt in node.body:
+            self.generate(stmt)
+
+        self.ir.emit("JUMP", start_label)      # jump back to start
+        self.ir.code[jmp_exit].b = len(self.ir.code)  # patch exit
+    
+    def gen_For(self, node):
+        # Generate start and end values
+        start_reg = self.generate(node.start)
+        end_reg = self.generate(node.end)
+
+        # Store start in loop variable
+        var_reg = self.ir.new_reg()
+        self.ir.emit("MOVE", var_reg, start_reg)
+        self.ir.emit("STORE_VAR", node.target.id, var_reg)
+
+        loop_start = len(self.ir.code)  # start of loop
+
+        # Load loop variable
+        loop_var_reg = self.ir.new_reg()
+        self.ir.emit("LOAD_VAR", loop_var_reg, node.target.id)
+
+        # Compare with end
+        cmp_reg = self.ir.new_reg()
+        self.ir.emit("LT", cmp_reg, loop_var_reg, end_reg)  # loop while var < end
+
+        jmp_exit = len(self.ir.code)
+        self.ir.emit("JUMP_IF_FALSE", cmp_reg, None)
+
+        # Generate loop body
+        for stmt in node.body:
+            self.generate(stmt)
+
+        # Increment loop variable
+        self.ir.emit("LOAD_VAR", var_reg, node.target.id)
+        one_reg = self.ir.new_reg()
+        self.ir.emit("LOAD_CONST", one_reg, Imm(1))
+        self.ir.emit("ADD", var_reg, var_reg, one_reg)
+        self.ir.emit("STORE_VAR", node.target.id, var_reg)
+
+        # Jump back to start
+        self.ir.emit("JUMP", loop_start)
+        self.ir.code[jmp_exit].b = len(self.ir.code)
 
 --- src/ir/ir.py ---
 from src.ir.operands import Reg, Imm
@@ -1527,12 +1681,31 @@ class Analyser():
         elif isinstance(node, FunctionDef):
             self.symbols.define(node.name, "function")
             
-            #self.symbols.enter_scope() # lets just pretend this exists
+            self.symbols.enter_scope() # lets just pretend this exists
             for arg in node.args:
                 self.symbols.define(arg, UNKNOWN)
             for stmt in node.body:
                 self.analyse(stmt)
-            #self.symbols.exit_scope()
+            self.symbols.exit_scope()
+        
+        elif isinstance(node, While):
+            test_type = self.analyse(node.test)
+            if test_type != BOOL:
+                raise TypeError("While condition must be boolean")
+            for stmt in node.body:
+                self.analyse(stmt)
+        
+        elif isinstance(node, For):
+            start_type = self.analyse(node.start)
+            end_type = self.analyse(node.end)
+
+            if start_type != NUMBER or end_type != NUMBER:
+                raise TypeError("For loop start and end must be numbers")
+
+            self.symbols.define(node.target.id, NUMBER)
+
+            for stmt in node.body:
+                self.analyse(stmt)
         
         else:
             return None

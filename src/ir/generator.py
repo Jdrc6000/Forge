@@ -194,3 +194,41 @@ class IRGenerator:
 
         self.ir.emit("JUMP", start_label)      # jump back to start
         self.ir.code[jmp_exit].b = len(self.ir.code)  # patch exit
+    
+    def gen_For(self, node):
+        # Generate start and end values
+        start_reg = self.generate(node.start)
+        end_reg = self.generate(node.end)
+
+        # Store start in loop variable
+        var_reg = self.ir.new_reg()
+        self.ir.emit("MOVE", var_reg, start_reg)
+        self.ir.emit("STORE_VAR", node.target.id, var_reg)
+
+        loop_start = len(self.ir.code)  # start of loop
+
+        # Load loop variable
+        loop_var_reg = self.ir.new_reg()
+        self.ir.emit("LOAD_VAR", loop_var_reg, node.target.id)
+
+        # Compare with end
+        cmp_reg = self.ir.new_reg()
+        self.ir.emit("LT", cmp_reg, loop_var_reg, end_reg)  # loop while var < end
+
+        jmp_exit = len(self.ir.code)
+        self.ir.emit("JUMP_IF_FALSE", cmp_reg, None)
+
+        # Generate loop body
+        for stmt in node.body:
+            self.generate(stmt)
+
+        # Increment loop variable
+        self.ir.emit("LOAD_VAR", var_reg, node.target.id)
+        one_reg = self.ir.new_reg()
+        self.ir.emit("LOAD_CONST", one_reg, Imm(1))
+        self.ir.emit("ADD", var_reg, var_reg, one_reg)
+        self.ir.emit("STORE_VAR", node.target.id, var_reg)
+
+        # Jump back to start
+        self.ir.emit("JUMP", loop_start)
+        self.ir.code[jmp_exit].b = len(self.ir.code)
