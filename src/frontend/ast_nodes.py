@@ -60,6 +60,10 @@ class FunctionDef(AST):
     body: list[AST]
 
 @dataclass
+class Return(AST):
+    value: Optional[AST] = None
+
+@dataclass
 class While(AST):
     test: AST
     body: list[AST]

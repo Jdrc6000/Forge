@@ -37,6 +37,7 @@ tt_for = "FOR"
 tt_dot = "."
 tt_in = "IN"
 tt_range = "RANGE"
+tt_return = "RETURN"
 
 keywords = {
     "if": tt_if,
@@ -50,7 +51,8 @@ keywords = {
     "fn": tt_fn, # functions
     "while": tt_while,
     "for": tt_for,
-    "in": tt_in
+    "in": tt_in,
+    "return": tt_return
 }
 
 single_char_tokens = {

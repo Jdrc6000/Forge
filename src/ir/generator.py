@@ -55,11 +55,13 @@ class IRGenerator:
             return None
         else:
             arg_regs = [self.generate(a) for a in node.args]
-            instr = Instr("CALL", node.func.id)
+            dest = self.ir.new_reg()
+            instr = Instr("CALL", node.func.id, dest)
             instr.arg_regs = arg_regs
             instr.param_names = []  # will be resolved at runtime from FunctionDef label
             self.ir.code.append(instr)
-            return None
+            
+            return dest
     
     # uses backpatching
     def gen_If(self, node):
@@ -173,14 +175,24 @@ class IRGenerator:
     
     def gen_FunctionDef(self, node):
         instr = Instr("LABEL", node.name)
-        instr.param_names = node.args  # store ["test_arg", ...]
+        instr.param_names = node.args
         self.ir.code.append(instr)
         
         for stmt in node.body:
             self.generate(stmt)
         
-        self.ir.emit("LOAD_CONST", self.ir.new_reg(), Imm(0))
-        self.ir.emit("RETURN")
+        default_reg = self.ir.new_reg()
+        self.ir.emit("LOAD_CONST", default_reg, Imm(0))
+        self.ir.emit("RETURN", default_reg)
+    
+    def gen_Return(self, node):
+        if node.value:
+            reg = self.generate(node.value)
+        else:
+            reg = self.ir.new_reg()
+            self.ir.emit("LOAD_CONST", reg, Imm(0))
+
+        self.ir.emit("RETURN", reg)
     
     def gen_While(self, node):
         start_label = len(self.ir.code)       # start of loop

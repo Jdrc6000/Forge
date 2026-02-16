@@ -11,11 +11,13 @@ from src.runtime.vm import VM
 from src.ir.operands import Reg, Imm
 
 code = """
-for i in 1..3:
-    if i == 2:
-        print("i is 2")
+fn check(a, b):
+    if a == b:
+        return true
     else:
-        print("i is not 2")
+        return false
+
+print(check(5, 5))
 """
 
 start = time()

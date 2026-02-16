@@ -48,7 +48,8 @@ class VM:
                 print(self.regs[a.id])
             
             elif op == "CALL":
-                self.call_stack.append((self.ip + 1, self.vars.copy()))
+                # saves ip, vars, and dest reg
+                self.call_stack.append((self.ip + 1, self.vars.copy(), b))
                 
                 target_ip = self.find_label(a)
                 self.ip = target_ip
@@ -65,12 +66,19 @@ class VM:
                 continue
 
             elif op == "RETURN":
+                ret_value = None
+                if a is not None:
+                    ret_value = self.regs[a.id]
+
                 if self.call_stack:
-                    self.ip, caller_vars = self.call_stack.pop()
+                    self.ip, caller_vars, dest_reg = self.call_stack.pop()
                     self.vars = caller_vars
+
+                    if ret_value is not None and dest_reg is not None:
+                        self.regs[dest_reg.id] = ret_value
+
                     continue
                 else:
-                    # top-level RETURN: just stop execution
                     break
             
             elif op == "LABEL":

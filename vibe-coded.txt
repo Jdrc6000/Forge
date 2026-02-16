@@ -12,8 +12,13 @@ from src.runtime.vm import VM
 from src.ir.operands import Reg, Imm
 
 code = """
-for i in 0..3:
-    print(i)
+fn check(a, b):
+    if a == b:
+        return true
+    else:
+        return false
+
+print(check(5, 5))
 """
 
 start = time()
@@ -122,6 +127,10 @@ class FunctionDef(AST):
     body: list[AST]
 
 @dataclass
+class Return(AST):
+    value: Optional[AST] = None
+
+@dataclass
 class While(AST):
     test: AST
     body: list[AST]
@@ -177,27 +186,34 @@ class Lexer():
                 self.indents.pop()
                 tokens.append(Token(tt_dedent))
     
-    # had to crack this like the alan turing cracked cyphertext
     def number(self):
         num_str = ""
         dot_count = 0
-        
-        while self.current_char and (self.current_char.isdigit() or self.current_char == "."):
+        start_pos = self.pos  # optional: for better error messages
+
+        while self.current_char and self.current_char in "0123456789.":
             if self.current_char == ".":
-                if dot_count == 1:
-                    break
-                
                 dot_count += 1
-                num_str += "."
-            else:
-                num_str += self.current_char
-            
+                if dot_count == 1:
+                    next_char = self.peek()
+                    next_next_char = self.text[self.pos + 2] if self.pos + 2 < len(self.text) else None
+                    if next_char == ".":
+                        break  # leave the .. for the range rule
+                    if next_char is None or not next_char.isdigit():
+                        break
+
+            num_str += self.current_char
             self.advance()
-        
+
+        if not num_str:
+            raise Exception("Expected number")
+
         if dot_count == 0:
             return Token(tt_int, int(num_str))
-        else:
+        elif dot_count == 1 and num_str[-1] != ".":
             return Token(tt_float, float(num_str))
+        else:
+            raise Exception(f"Invalid number format near position {start_pos}: '{num_str}'")
     
     def string(self):
         string_val = ""
@@ -238,11 +254,6 @@ class Lexer():
             elif self.current_char.isspace():
                 self.skip_whitespace()
             
-            elif self.current_char == "." and self.peek() == ".":
-                self.advance()
-                self.advance()
-                tokens.append(Token(tt_range))
-            
             elif self.current_char == "!" and self.peek() == "=":
                 self.advance()
                 self.advance()
@@ -265,6 +276,11 @@ class Lexer():
             elif self.current_char == "<":
                 self.advance()
                 tokens.append(Token(tt_less))
+            
+            elif self.current_char == "." and self.peek() == ".":
+                self.advance()
+                self.advance()
+                tokens.append(Token(tt_range))
             
             elif self.current_char in single_char_tokens:
                 tok_type = single_char_tokens[self.current_char]
@@ -346,11 +362,12 @@ class Parser():
             return self.parse_while()
         elif self.current_token.type == "FOR":
             return self.parse_for()
+        elif self.current_token.type == "RETURN":
+            return self.parse_return()
         else:
             return Expr(self.parse_expr())
     
     def parse_print(self):
-        # CONSUME
         self.advance()
         if self.current_token.type != "LPAREN":
             raise Exception("Expected '(' after print")
@@ -445,7 +462,6 @@ class Parser():
             comparators.append(self.parse_binop())
 
         if ops:
-            # adjust AST if needed
             return Compare(left, ops[0], comparators)
 
         return left
@@ -470,8 +486,6 @@ class Parser():
         
         return left
     
-    # why?
-    #  for hotswapping past-josh, obviously...
     def parse_expr(self):
         return self.parse_logic_or()
     
@@ -518,9 +532,28 @@ class Parser():
             self.advance()
             return Constant(tok.value)
         
-        elif tok.type == "STRING":
+        elif tok.type == "NAME":
             self.advance()
-            return Constant(tok.value)
+            node = Name(tok.value)
+
+            if self.current_token.type == "LPAREN":
+                self.advance()  # skip '('
+                args = []
+
+                if self.current_token.type != "RPAREN":
+                    while True:
+                        args.append(self.parse_expr())
+                        if self.current_token.type == "COMMA":
+                            self.advance()
+                        elif self.current_token.type == "RPAREN":
+                            break
+                        else:
+                            raise Exception("Expected ',' or ')' in argument list")
+
+                self.advance()  # skip ')'
+                return Call(node, args)
+
+            return node
         
         elif tok.type == "NAME":
             self.advance()
@@ -561,7 +594,6 @@ class Parser():
             raise Exception("Expected '(' after function name")
         self.advance()  # skip '('
 
-        # parse argument names (can be empty)
         args = []
         if self.current_token.type != "RPAREN":
             while True:
@@ -688,6 +720,15 @@ class Parser():
 
         self.advance()  # consume DEDENT
         return For(loop_var, start, end, body)
+
+    def parse_return(self):
+        self.advance()  # consume 'return'
+
+        if self.current_token.type in ("NEWLINE", "DEDENT"):
+            return Return(None)
+
+        value = self.parse_expr()
+        return Return(value)
     
     def token_to_op(self, token):
         mapping = {
@@ -700,8 +741,6 @@ class Parser():
         
         return mapping[token.type]
     
-    # if i have to spell "precedence" again
-    # i will literally light my codebase on fire
     def get_precedence(self, token):
         prec = {
             "PLUS": 1,
@@ -713,7 +752,6 @@ class Parser():
         
         return prec[token.type]
     
-    # my beloved dump function, i love this piece of scrap
     def dump(self, node, indent=0):
         pad = "  " * indent
 
@@ -787,6 +825,15 @@ class Parser():
             for something in node.body: # chat also remind me to change this
                 self.dump(something, indent + 2)
         
+        elif isinstance(node, For):
+            print(f"{pad}For({node.target.id})")
+            self.dump(node.start, indent + 1)
+            self.dump(node.end, indent + 1)
+            
+            print(f"{pad}  Body:")
+            for something in node.body: # chat also also remind me to change this
+                self.dump(something, indent + 2)
+        
         else:
             print(f"{pad}{node}")
 
@@ -830,6 +877,7 @@ tt_for = "FOR"
 tt_dot = "."
 tt_in = "IN"
 tt_range = "RANGE"
+tt_return = "RETURN"
 
 keywords = {
     "if": tt_if,
@@ -843,7 +891,8 @@ keywords = {
     "fn": tt_fn, # functions
     "while": tt_while,
     "for": tt_for,
-    "in": tt_in
+    "in": tt_in,
+    "return": tt_return
 }
 
 single_char_tokens = {
@@ -907,21 +956,17 @@ class IRGenerator:
     def gen_Module(self, node):
         self.ir.emit("LABEL", "__main__")
         
-        # first generate top-level statements
         for stmt in node.body:
             if not isinstance(stmt, FunctionDef):
                 self.generate(stmt)
 
-        # jump over function definitions so we don't fall into them
         jmp = len(self.ir.code)
         self.ir.emit("JUMP", None)
 
-        # then generate function definitions
         for stmt in node.body:
             if isinstance(stmt, FunctionDef):
                 self.generate(stmt)
         
-        # patch the jump to land here (after all functions)
         self.ir.code[jmp].a = len(self.ir.code)
     
     def gen_Expr(self, node):
@@ -948,13 +993,14 @@ class IRGenerator:
             return None
         else:
             arg_regs = [self.generate(a) for a in node.args]
-            instr = Instr("CALL", node.func.id)
+            dest = self.ir.new_reg()
+            instr = Instr("CALL", node.func.id, dest)
             instr.arg_regs = arg_regs
             instr.param_names = []  # will be resolved at runtime from FunctionDef label
             self.ir.code.append(instr)
-            return None
+            
+            return dest
     
-    # uses backpatching
     def gen_If(self, node):
         test = self.generate(node.test)
 
@@ -977,10 +1023,6 @@ class IRGenerator:
         else:
             self.ir.code[jmp_false].b = len(self.ir.code)
     
-    # here be dragons
-    # honestly tho, i havent a clue whats going on, but all i know
-    # is that you can now do:
-    #   a < b < c
     def gen_Compare(self, node):
         left = self.generate(node.left)
 
@@ -991,7 +1033,6 @@ class IRGenerator:
             right = self.generate(comp)
             dest = self.ir.new_reg()
             
-            # safeguards against idiots using wrongs ops (me)
             opcode = cmp.get(node.op)
             if not opcode:
                 raise RuntimeError(f"Unsupported comparison {node.op}")
@@ -1000,7 +1041,6 @@ class IRGenerator:
             if result is None:
                 result = dest
             else:
-                # combine with AND
                 tmp = self.ir.new_reg()
                 self.ir.emit("AND", tmp, result, dest)
                 result = tmp
@@ -1009,17 +1049,13 @@ class IRGenerator:
 
         return result
     
-    # binop the goat for using less regs
     def gen_BinOp(self, node):
-        # short-circuit logic
         if node.op in ("and", "or"):
             return self.gen_logic(node)
 
-        # generate left first
         left = self.generate(node.left)
         right = self.generate(node.right)
 
-        # reuse left register as destination
         dest = left
         self.ir.emit(binops[node.op], dest, left, right)
         return dest
@@ -1028,7 +1064,6 @@ class IRGenerator:
         left = self.generate(node.left)
         dest = self.ir.new_reg()
 
-        # copy left into dest
         self.ir.emit("MOVE", dest, left)
 
         if node.op == "and":
@@ -1066,14 +1101,24 @@ class IRGenerator:
     
     def gen_FunctionDef(self, node):
         instr = Instr("LABEL", node.name)
-        instr.param_names = node.args  # store ["test_arg", ...]
+        instr.param_names = node.args
         self.ir.code.append(instr)
         
         for stmt in node.body:
             self.generate(stmt)
         
-        self.ir.emit("LOAD_CONST", self.ir.new_reg(), Imm(0))
-        self.ir.emit("RETURN")
+        default_reg = self.ir.new_reg()
+        self.ir.emit("LOAD_CONST", default_reg, Imm(0))
+        self.ir.emit("RETURN", default_reg)
+    
+    def gen_Return(self, node):
+        if node.value:
+            reg = self.generate(node.value)
+        else:
+            reg = self.ir.new_reg()
+            self.ir.emit("LOAD_CONST", reg, Imm(0))
+
+        self.ir.emit("RETURN", reg)
     
     def gen_While(self, node):
         start_label = len(self.ir.code)       # start of loop
@@ -1089,40 +1134,33 @@ class IRGenerator:
         self.ir.code[jmp_exit].b = len(self.ir.code)  # patch exit
     
     def gen_For(self, node):
-        # Generate start and end values
         start_reg = self.generate(node.start)
         end_reg = self.generate(node.end)
 
-        # Store start in loop variable
         var_reg = self.ir.new_reg()
         self.ir.emit("MOVE", var_reg, start_reg)
         self.ir.emit("STORE_VAR", node.target.id, var_reg)
 
         loop_start = len(self.ir.code)  # start of loop
 
-        # Load loop variable
         loop_var_reg = self.ir.new_reg()
         self.ir.emit("LOAD_VAR", loop_var_reg, node.target.id)
 
-        # Compare with end
         cmp_reg = self.ir.new_reg()
         self.ir.emit("LT", cmp_reg, loop_var_reg, end_reg)  # loop while var < end
 
         jmp_exit = len(self.ir.code)
         self.ir.emit("JUMP_IF_FALSE", cmp_reg, None)
 
-        # Generate loop body
         for stmt in node.body:
             self.generate(stmt)
 
-        # Increment loop variable
         self.ir.emit("LOAD_VAR", var_reg, node.target.id)
         one_reg = self.ir.new_reg()
         self.ir.emit("LOAD_CONST", one_reg, Imm(1))
         self.ir.emit("ADD", var_reg, var_reg, one_reg)
         self.ir.emit("STORE_VAR", node.target.id, var_reg)
 
-        # Jump back to start
         self.ir.emit("JUMP", loop_start)
         self.ir.code[jmp_exit].b = len(self.ir.code)
 
@@ -1151,7 +1189,6 @@ class IR:
     def emit(self, op, a=None, b=None, c=None):
         self.code.append(Instr(op, a, b, c))
     
-    # ast-dump had a child!!
     def dump(self):
         def fmt(x):
             if isinstance(x, Reg):
@@ -1199,7 +1236,6 @@ class Pass:
         return getattr(self, method, self.generic)(node)
 
     def generic(self, node):
-        # safe guard against edge case #382
         if not hasattr(node, "__dict__"):
             return node
         
@@ -1292,7 +1328,6 @@ from src.ir.ir import Instr
 from src.ir.operands import Reg
 from collections import namedtuple
 
-# Live range structure
 class LiveRange:
     def __init__(self, reg, start, end):
         self.reg = reg       # virtual register
@@ -1301,7 +1336,6 @@ class LiveRange:
         self.phys = None     # physical register assigned
         self.slot = None
 
-# Compute defs and uses per opcode
 def get_defs_uses(instr):
     if instr.op in ("LOAD_CONST", "LOAD_VAR"):
         return [instr.a], []
@@ -1322,7 +1356,6 @@ def get_defs_uses(instr):
     else:
         return [], []
 
-# Compute live ranges based on defs/uses
 def compute_live_ranges(code):
     first = {}
     last = {}
@@ -1371,7 +1404,6 @@ def linear_scan_allocate(code, num_regs):
                 r.phys = None
                 continue
             else:
-                # spill an active range
                 victim.slot = next_slot
                 next_slot += 1
 
@@ -1389,13 +1421,11 @@ def linear_scan_allocate(code, num_regs):
                 return Reg(lr.phys)
         return op
     
-    # Rewrite registers in a new IR list
     range_map = {r.reg: r for r in ranges}
     for instr in code:
 
         defs, uses = get_defs_uses(instr)
 
-        # reload uses
         for u in uses:
             if not isinstance(u, Reg):
                 continue
@@ -1410,7 +1440,6 @@ def linear_scan_allocate(code, num_regs):
             rewrite_operand(instr.c)
         )
         
-        # Carry over CALL/LABEL metadata, rewriting virtual regs in arg_regs
         if hasattr(instr, 'arg_regs'):
             new_instr.arg_regs = [rewrite_operand(r) for r in instr.arg_regs]
         if hasattr(instr, 'param_names'):
@@ -1418,7 +1447,6 @@ def linear_scan_allocate(code, num_regs):
 
         new_code.append(new_instr)
 
-        # spill defs
         for d in defs:
             if not isinstance(d, Reg):
                 continue
@@ -1429,8 +1457,6 @@ def linear_scan_allocate(code, num_regs):
     return new_code
 
 --- src/runtime/vm.py ---
-# past-josh: PLEASE FOR THE LOVE OF GOD REFACTOR TO REGISTER-BASED!!
-# future-josh: your wish is my command
 class VM:
     def __init__(self, num_regs):
         self.num_regs = num_regs
@@ -1479,13 +1505,12 @@ class VM:
                 print(self.regs[a.id])
             
             elif op == "CALL":
-                self.call_stack.append((self.ip + 1, self.vars.copy()))
+                self.call_stack.append((self.ip + 1, self.vars.copy(), b))
                 
                 target_ip = self.find_label(a)
                 self.ip = target_ip
                 self.vars = {}
 
-                # get param names from the LABEL instruction itself
                 label_instr = code[target_ip]
                 param_names = getattr(label_instr, "param_names", [])
                 arg_regs = getattr(instr, "arg_regs", [])
@@ -1496,17 +1521,22 @@ class VM:
                 continue
 
             elif op == "RETURN":
+                ret_value = None
+                if a is not None:
+                    ret_value = self.regs[a.id]
+
                 if self.call_stack:
-                    self.ip, caller_vars = self.call_stack.pop()
+                    self.ip, caller_vars, dest_reg = self.call_stack.pop()
                     self.vars = caller_vars
+
+                    if ret_value is not None and dest_reg is not None:
+                        self.regs[dest_reg.id] = ret_value
+
                     continue
                 else:
-                    # top-level RETURN: just stop execution
                     break
             
             elif op == "LABEL":
-                # its literally just a label...
-                # its meant to do nothing
                 pass
             
             elif op == "JUMP":
@@ -1526,14 +1556,12 @@ class VM:
             elif op == "MOVE":
                 self.regs[a.id] = self.regs[b.id]
             
-            # spilling
             elif op == "SPILL_STORE":
                 self.stack[a] = self.regs[b]
 
             elif op == "SPILL_LOAD":
                 self.regs[a] = self.stack[b]
             
-            # arithmetic
             elif op == "ADD":
                 self.regs[a.id] = self.regs[b.id] + self.regs[c.id]
 
@@ -1555,7 +1583,6 @@ class VM:
             elif op == "NOT":
                 self.regs[a.id] = not self.regs[b.id]
 
-            # comparisons
             elif op == "EQ":
                 self.regs[a.id] = self.regs[b.id] == self.regs[c.id]
 
@@ -1587,15 +1614,12 @@ from src.semantic.types import *
 from src.frontend.ast_nodes import *
 from src.semantic.symbol_table import *
 
-# message for future-josh
-#  this is going to be the most confusing, awful, horrid-looking code you have ever seen,
-#  so dont even bother trying to debug this pile of horse-doodoo
 
-# future-josh here, i have to debug this now...
 
 class Analyser():
     def __init__(self, symbols):
         self.symbols: SymbolTable = symbols
+        self.current_function = None
     
     def analyse(self, node):
         if isinstance(node, Module):
@@ -1608,7 +1632,6 @@ class Analyser():
             
             return None
         
-        # unused?
         elif isinstance(node, Expr):
             self.analyse(node.value)
         
@@ -1641,7 +1664,6 @@ class Analyser():
             left = self.analyse(node.left)
             right = self.analyse(node.right)
 
-            # if left is unknown, adopt right's type
             if isinstance(left, UnknownType):
                 left = right
                 node.left.inferred_type = right
@@ -1681,12 +1703,29 @@ class Analyser():
         elif isinstance(node, FunctionDef):
             self.symbols.define(node.name, "function")
             
-            self.symbols.enter_scope() # lets just pretend this exists
+            self.symbols.enter_scope()
+            old_fn = self.current_function
+            self.current_function = node
+
             for arg in node.args:
                 self.symbols.define(arg, UNKNOWN)
+
             for stmt in node.body:
                 self.analyse(stmt)
+
+            self.current_function = old_fn
             self.symbols.exit_scope()
+        
+        elif isinstance(node, Return):
+            if self.current_function is None:
+                raise Exception("Return outside function")
+
+            if node.value:
+                return_type = self.analyse(node.value)
+            else:
+                return_type = NUMBER  # your default implicit return type
+
+            return return_type
         
         elif isinstance(node, While):
             test_type = self.analyse(node.test)
@@ -1769,7 +1808,6 @@ class StringType(Type):
 class BoolType(Type):
     name: ClassVar[str] = "bool"
 
-# future proofing
 @dataclass(frozen=True)
 class ListType(Type):
     name: ClassVar[str] = "list"
@@ -1783,7 +1821,6 @@ class UnknownType(Type):
         return True
     
     def supports_binary(self, op: str, other: "Type") -> bool:
-        # allow the operation and "become" the other type
         return True
 
 NUMBER = NumberType()

@@ -11,6 +11,7 @@ from src.semantic.symbol_table import *
 class Analyser():
     def __init__(self, symbols):
         self.symbols: SymbolTable = symbols
+        self.current_function = None
     
     def analyse(self, node):
         if isinstance(node, Module):
@@ -93,15 +94,33 @@ class Analyser():
             node.inferred_type = BOOL
             return BOOL
 
+        # here be dragons, lets hope it works
         elif isinstance(node, FunctionDef):
             self.symbols.define(node.name, "function")
             
-            self.symbols.enter_scope() # lets just pretend this exists
+            self.symbols.enter_scope()
+            old_fn = self.current_function
+            self.current_function = node
+
             for arg in node.args:
                 self.symbols.define(arg, UNKNOWN)
+
             for stmt in node.body:
                 self.analyse(stmt)
+
+            self.current_function = old_fn
             self.symbols.exit_scope()
+        
+        elif isinstance(node, Return):
+            if self.current_function is None:
+                raise Exception("Return outside function")
+
+            if node.value:
+                return_type = self.analyse(node.value)
+            else:
+                return_type = NUMBER  # your default implicit return type
+
+            return return_type
         
         elif isinstance(node, While):
             test_type = self.analyse(node.test)

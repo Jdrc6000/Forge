@@ -53,6 +53,8 @@ class Parser():
             return self.parse_while()
         elif self.current_token.type == "FOR":
             return self.parse_for()
+        elif self.current_token.type == "RETURN":
+            return self.parse_return()
         else:
             return Expr(self.parse_expr())
     
@@ -225,9 +227,29 @@ class Parser():
             self.advance()
             return Constant(tok.value)
         
-        elif tok.type == "STRING":
+        elif tok.type == "NAME":
             self.advance()
-            return Constant(tok.value)
+            node = Name(tok.value)
+
+            # handle call syntax
+            if self.current_token.type == "LPAREN":
+                self.advance()  # skip '('
+                args = []
+
+                if self.current_token.type != "RPAREN":
+                    while True:
+                        args.append(self.parse_expr())
+                        if self.current_token.type == "COMMA":
+                            self.advance()
+                        elif self.current_token.type == "RPAREN":
+                            break
+                        else:
+                            raise Exception("Expected ',' or ')' in argument list")
+
+                self.advance()  # skip ')'
+                return Call(node, args)
+
+            return node
         
         elif tok.type == "NAME":
             self.advance()
@@ -395,6 +417,16 @@ class Parser():
 
         self.advance()  # consume DEDENT
         return For(loop_var, start, end, body)
+
+    def parse_return(self):
+        self.advance()  # consume 'return'
+
+        # return with no value
+        if self.current_token.type in ("NEWLINE", "DEDENT"):
+            return Return(None)
+
+        value = self.parse_expr()
+        return Return(value)
     
     def token_to_op(self, token):
         mapping = {
