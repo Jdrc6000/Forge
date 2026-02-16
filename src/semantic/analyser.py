@@ -96,12 +96,19 @@ class Analyser():
         elif isinstance(node, FunctionDef):
             self.symbols.define(node.name, "function")
             
-            #self.symbols.enter_scope() # lets just pretend this exists
+            self.symbols.enter_scope() # lets just pretend this exists
             for arg in node.args:
                 self.symbols.define(arg, UNKNOWN)
             for stmt in node.body:
                 self.analyse(stmt)
-            #self.symbols.exit_scope()
+            self.symbols.exit_scope()
+        
+        elif isinstance(node, While):
+            test_type = self.analyse(node.test)
+            if test_type != BOOL:
+                raise TypeError("While condition must be boolean")
+            for stmt in node.body:
+                self.analyse(stmt)
         
         else:
             return None

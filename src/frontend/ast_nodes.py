@@ -58,3 +58,8 @@ class FunctionDef(AST):
     name: str
     args: list[str]
     body: list[AST]
+
+@dataclass
+class While(AST):
+    test: AST
+    body: list[AST]

@@ -49,6 +49,8 @@ class Parser():
                 return Expr(Name(self.current_token.value))
         elif self.current_token.type == "FN":
             return self.parse_function()
+        elif self.current_token.type == "WHILE":
+            return self.parse_while()
         else:
             return Expr(self.parse_expr())
     
@@ -302,6 +304,32 @@ class Parser():
         
         self.advance()
         return FunctionDef(func_name, args, body)
+    
+    def parse_while(self):
+        self.advance()  # skip 'while'
+        test = self.parse_expr()
+
+        if self.current_token.type != "COLON":
+            raise Exception("Expected ':' after while condition")
+        self.advance()
+
+        if self.current_token.type != "NEWLINE":
+            raise Exception("Expected newline after ':'")
+        self.advance()
+
+        if self.current_token.type != "INDENT":
+            raise Exception("Expected indent in while body")
+        self.advance()
+
+        body = []
+        while self.current_token.type != "DEDENT":
+            self.skip_newlines()
+            if self.current_token.type == "DEDENT":
+                break
+            body.append(self.statement())
+
+        self.advance()  # consume DEDENT
+        return While(test, body)
     
     def parse_call(self):
         func_name = self.current_token.value

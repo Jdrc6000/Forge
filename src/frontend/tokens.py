@@ -32,6 +32,7 @@ tt_not = "NOT"
 tt_true = "TRUE"
 tt_false = "FALSE"
 tt_fn = "FN"
+tt_while = "WHILE"
 
 keywords = {
     "if": tt_if,
@@ -42,7 +43,8 @@ keywords = {
     "not": tt_not,
     "true": tt_true,
     "false": tt_false,
-    "fn": tt_fn # functions
+    "fn": tt_fn, # functions
+    "while": tt_while
 }
 
 single_char_tokens = {

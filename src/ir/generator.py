@@ -181,3 +181,16 @@ class IRGenerator:
         
         self.ir.emit("LOAD_CONST", self.ir.new_reg(), Imm(0))
         self.ir.emit("RETURN")
+    
+    def gen_While(self, node):
+        start_label = len(self.ir.code)       # start of loop
+        test_reg = self.generate(node.test)
+
+        jmp_exit = len(self.ir.code)
+        self.ir.emit("JUMP_IF_FALSE", test_reg, None)  # exit if false
+
+        for stmt in node.body:
+            self.generate(stmt)
+
+        self.ir.emit("JUMP", start_label)      # jump back to start
+        self.ir.code[jmp_exit].b = len(self.ir.code)  # patch exit

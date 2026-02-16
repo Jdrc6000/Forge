@@ -11,11 +11,12 @@ from src.runtime.vm import VM
 from src.ir.operands import Reg, Imm
 
 code = """
-fn hello(name):
-    print("hello " + name + "!")
+i = 3
+while i >= 1:
+    print(i)
+    i = i - 1
 
-hello("james")
-hello("patricia")
+print("GO!!")
 """
 
 start = time()
