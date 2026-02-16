@@ -79,16 +79,19 @@ class ConstantFolder(Pass):
         node.left = self.run(node.left)
         node.comparators = [self.run(c) for c in node.comparators]
 
-        if isinstance(node.left, Constant) and isinstance(node.comparators[0], Constant):
-            l = node.left.value
-            r = node.comparators[0].value
-
-            if node.op == "EE": return Constant(l == r)
-            if node.op == "NE": return Constant(l != r)
-            if node.op == "LESS": return Constant(l < r)
-            if node.op == "GREATER": return Constant(l > r)
-            if node.op == "LE": return Constant(l <= r)
-            if node.op == "GE": return Constant(l >= r)
+        # Very simple case: everything constant
+        if isinstance(node.left, Constant) and all(isinstance(c, Constant) for c in node.comparators):
+            values = [node.left.value] + [c.value for c in node.comparators]
+            result = True
+            for i, op in enumerate(node.ops):
+                a, b = values[i], values[i+1]
+                if op == "==":   result = result and (a == b)
+                elif op == "!=": result = result and (a != b)
+                elif op == "<":  result = result and (a < b)
+                elif op == ">":  result = result and (a > b)
+                elif op == "<=": result = result and (a <= b)
+                elif op == ">=": result = result and (a >= b)
+            return Constant(result)
 
         return node
 

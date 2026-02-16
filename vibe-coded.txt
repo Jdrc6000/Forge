@@ -15,6 +15,8 @@ fn check(a, b):
     else:
         return false
 print(check(5, 5))
+print(check(5, 7))
+print(0 < 99 < 10)
 """
 start = time()
 lexer = Lexer(code)
@@ -92,7 +94,7 @@ class If(AST):
 @dataclass
 class Compare(AST):
     left: AST
-    op: str
+    ops: list[str]
     comparators: List[AST]
 @dataclass
 class FunctionDef(AST):
@@ -365,17 +367,25 @@ class Parser():
         )
     def parse_comparison(self):
         left = self.parse_binop()
-        comparators = []
         ops = []
+        comparators = []
         while self.current_token.type in (
             TokenType.EE, TokenType.NE, TokenType.LESS,
             TokenType.GREATER, TokenType.LE, TokenType.GE
         ):
-            ops.append(self.current_token.type)
+            op_str = {
+                TokenType.EE: "==",
+                TokenType.NE: "!=",
+                TokenType.LESS: "<",
+                TokenType.GREATER: ">",
+                TokenType.LE: "<=",
+                TokenType.GE: ">=",
+            }[self.current_token.type]
+            ops.append(op_str)
             self.advance()
             comparators.append(self.parse_binop())
         if ops:
-            return Compare(left, ops[0].name, comparators)
+            return Compare(left, ops, comparators)
         return left
     def parse_logic_or(self):
         left = self.parse_logic_and()
@@ -638,31 +648,31 @@ class Parser():
                 for line in node.orelse:
                     self.dump(line, indent + 2)
         elif isinstance(node, Compare):
-            print(f"{pad}Compare({node.op})")
+            print(f"{pad}Compare( {' '.join(node.ops)} )")
             self.dump(node.left, indent + 1)
-            for comparator in node.comparators:
-                self.dump(comparator, indent + 1)
+            for comp in node.comparators:
+                self.dump(comp, indent + 1)
         elif isinstance(node, FunctionDef):
             print(f"{pad}FunctionDef({node.name})")
             print(f"{pad}  Args:")
             for arg in node.args:
                 self.dump(arg, indent + 2)
             print(f"{pad}  Body:")
-            for something in node.body:
-                self.dump(something, indent + 2)
+            for stmt in node.body:
+                self.dump(stmt, indent + 2)
         elif isinstance(node, While):
             print(f"{pad}While")
             self.dump(node.test, indent + 1)
             print(f"{pad}  Body:")
-            for something in node.body:
-                self.dump(something, indent + 2)
+            for stmt in node.body:
+                self.dump(stmt, indent + 2)
         elif isinstance(node, For):
             print(f"{pad}For({node.target.id})")
             self.dump(node.start, indent + 1)
             self.dump(node.end, indent + 1)
             print(f"{pad}  Body:")
-            for something in node.body:
-                self.dump(something, indent + 2)
+            for stmt in node.body:
+                self.dump(stmt, indent + 2)
         else:
             print(f"{pad}{node}")
 
@@ -721,6 +731,14 @@ COMPARISIONS = {
     "GREATER": "GT",
     "LE": "LE",
     "GE": "GE"
+}
+CMP_OP_TO_IR = {
+    "==": "EQ",
+    "!=": "NE",
+    "<" : "LT",
+    ">" : "GT",
+    "<=": "LE",
+    ">=": "GE",
 }
 BINOPS = {
     "+": "ADD",
@@ -838,24 +856,18 @@ class IRGenerator:
         else:
             self.ir.code[jmp_false].b = len(self.ir.code)
     def gen_Compare(self, node):
-        left = self.generate(node.left)
-        result = None
-        current_left = left
-        for comp in node.comparators:
-            right = self.generate(comp)
-            dest = self.ir.new_reg()
-            opcode = COMPARISIONS.get(node.op)
-            if not opcode:
-                raise RuntimeError(f"Unsupported comparison {node.op}")
-            self.ir.emit(opcode, dest, left, right)
-            if result is None:
-                result = dest
-            else:
-                tmp = self.ir.new_reg()
-                self.ir.emit("AND", tmp, result, dest)
-                result = tmp
-            current_left = right
-        return result
+        left_reg = self.generate(node.left)
+        result_reg = self.ir.new_reg()
+        self.ir.emit("LOAD_CONST", result_reg, Imm(True))
+        current_left = left_reg
+        for op_str, right_ast in zip(node.ops, node.comparators):
+            right_reg = self.generate(right_ast)
+            cmp_reg = self.ir.new_reg()
+            ir_op = CMP_OP_TO_IR[op_str]
+            self.ir.emit(ir_op, cmp_reg, current_left, right_reg)
+            self.ir.emit("AND", result_reg, result_reg, cmp_reg)
+            current_left = right_reg
+        return result_reg
     def gen_BinOp(self, node):
         if node.op in ("and", "or"):
             return self.gen_logic(node)
@@ -1053,15 +1065,18 @@ class ConstantFolder(Pass):
     def visit_Compare(self, node):
         node.left = self.run(node.left)
         node.comparators = [self.run(c) for c in node.comparators]
-        if isinstance(node.left, Constant) and isinstance(node.comparators[0], Constant):
-            l = node.left.value
-            r = node.comparators[0].value
-            if node.op == "EE": return Constant(l == r)
-            if node.op == "NE": return Constant(l != r)
-            if node.op == "LESS": return Constant(l < r)
-            if node.op == "GREATER": return Constant(l > r)
-            if node.op == "LE": return Constant(l <= r)
-            if node.op == "GE": return Constant(l >= r)
+        if isinstance(node.left, Constant) and all(isinstance(c, Constant) for c in node.comparators):
+            values = [node.left.value] + [c.value for c in node.comparators]
+            result = True
+            for i, op in enumerate(node.ops):
+                a, b = values[i], values[i+1]
+                if op == "==":   result = result and (a == b)
+                elif op == "!=": result = result and (a != b)
+                elif op == "<":  result = result and (a < b)
+                elif op == ">":  result = result and (a > b)
+                elif op == "<=": result = result and (a <= b)
+                elif op == ">=": result = result and (a >= b)
+            return Constant(result)
         return node
 class DeadCodeEliminator(Pass):
     def visit_If(self, node):

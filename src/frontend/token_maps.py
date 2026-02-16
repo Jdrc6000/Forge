@@ -42,6 +42,15 @@ COMPARISIONS = {
     "GE": "GE"
 }
 
+CMP_OP_TO_IR = {
+    "==": "EQ",
+    "!=": "NE",
+    "<" : "LT",
+    ">" : "GT",
+    "<=": "LE",
+    ">=": "GE",
+}
+
 BINOPS = {
     "+": "ADD",
     "-": "SUB",

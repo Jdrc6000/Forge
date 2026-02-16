@@ -91,32 +91,22 @@ class IRGenerator:
     # is that you can now do:
     #   a < b < c
     def gen_Compare(self, node):
-        left = self.generate(node.left)
+        # We generate:   result = left op1 comp[0]  AND  comp[0] op2 comp[1]  AND ...
+        left_reg = self.generate(node.left)
+        result_reg = self.ir.new_reg()
+        self.ir.emit("LOAD_CONST", result_reg, Imm(True))   # start assuming true
 
-        result = None
-        current_left = left
+        current_left = left_reg
 
-        for comp in node.comparators:
-            right = self.generate(comp)
-            dest = self.ir.new_reg()
-            
-            # safeguards against idiots using wrongs ops (me)
-            opcode = COMPARISIONS.get(node.op)
-            if not opcode:
-                raise RuntimeError(f"Unsupported comparison {node.op}")
-            self.ir.emit(opcode, dest, left, right)
+        for op_str, right_ast in zip(node.ops, node.comparators):
+            right_reg = self.generate(right_ast)
+            cmp_reg = self.ir.new_reg()
+            ir_op = CMP_OP_TO_IR[op_str]
+            self.ir.emit(ir_op, cmp_reg, current_left, right_reg)
+            self.ir.emit("AND", result_reg, result_reg, cmp_reg)
+            current_left = right_reg
 
-            if result is None:
-                result = dest
-            else:
-                # combine with AND
-                tmp = self.ir.new_reg()
-                self.ir.emit("AND", tmp, result, dest)
-                result = tmp
-
-            current_left = right
-
-        return result
+        return result_reg
     
     # binop the goat for using less regs
     def gen_BinOp(self, node):

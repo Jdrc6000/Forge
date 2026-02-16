@@ -146,21 +146,27 @@ class Parser():
     
     def parse_comparison(self):
         left = self.parse_binop()
-        comparators = []
         ops = []
-
+        comparators = []
         while self.current_token.type in (
             TokenType.EE, TokenType.NE, TokenType.LESS,
             TokenType.GREATER, TokenType.LE, TokenType.GE
         ):
-            ops.append(self.current_token.type)
+            # Store string operator instead of TokenType
+            op_str = {
+                TokenType.EE: "==",
+                TokenType.NE: "!=",
+                TokenType.LESS: "<",
+                TokenType.GREATER: ">",
+                TokenType.LE: "<=",
+                TokenType.GE: ">=",
+            }[self.current_token.type]
+            ops.append(op_str)
             self.advance()
             comparators.append(self.parse_binop())
 
         if ops:
-            # adjust AST if needed
-            return Compare(left, ops[0].name, comparators)
-
+            return Compare(left, ops, comparators)
         return left
     
     def parse_logic_or(self):
@@ -506,10 +512,10 @@ class Parser():
                     self.dump(line, indent + 2)
         
         elif isinstance(node, Compare):
-            print(f"{pad}Compare({node.op})")
+            print(f"{pad}Compare( {' '.join(node.ops)} )")
             self.dump(node.left, indent + 1)
-            for comparator in node.comparators:
-                self.dump(comparator, indent + 1)
+            for comp in node.comparators:
+                self.dump(comp, indent + 1)
         
         elif isinstance(node, FunctionDef):
             print(f"{pad}FunctionDef({node.name})")
@@ -518,16 +524,16 @@ class Parser():
                 self.dump(arg, indent + 2)
             
             print(f"{pad}  Body:")
-            for something in node.body: # chat remind me to change this
-                self.dump(something, indent + 2)
+            for stmt in node.body:
+                self.dump(stmt, indent + 2)
         
         elif isinstance(node, While):
             print(f"{pad}While")
             self.dump(node.test, indent + 1)
             
             print(f"{pad}  Body:")
-            for something in node.body: # chat also remind me to change this
-                self.dump(something, indent + 2)
+            for stmt in node.body:
+                self.dump(stmt, indent + 2)
         
         elif isinstance(node, For):
             print(f"{pad}For({node.target.id})")
@@ -535,8 +541,8 @@ class Parser():
             self.dump(node.end, indent + 1)
             
             print(f"{pad}  Body:")
-            for something in node.body: # chat also also remind me to change this
-                self.dump(something, indent + 2)
+            for stmt in node.body:
+                self.dump(stmt, indent + 2)
         
         else:
             print(f"{pad}{node}")

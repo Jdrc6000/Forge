@@ -18,6 +18,9 @@ fn check(a, b):
         return false
 
 print(check(5, 5))
+print(check(5, 7))
+
+print(0 < 5 < 10)
 """
 
 start = time()

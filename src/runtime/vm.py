@@ -2,6 +2,8 @@ from src.frontend.token_types  import *
 
 # past-josh: PLEASE FOR THE LOVE OF GOD REFACTOR TO REGISTER-BASED!!
 # future-josh: your wish is my command
+
+# other past-josh: ok... PLEASE GET RID OF THIS AND COMPILE TO BYTECODE!!!!!!
 class VM:
     def __init__(self, num_regs):
         self.num_regs = num_regs
@@ -115,44 +117,32 @@ class VM:
             # arithmetic
             elif op == "ADD":
                 self.regs[a.id] = self.regs[b.id] + self.regs[c.id]
-
             elif op == "SUB":
                 self.regs[a.id] = self.regs[b.id] - self.regs[c.id]
-
             elif op == "MUL":
                 self.regs[a.id] = self.regs[b.id] * self.regs[c.id]
-
             elif op == "DIV":
                 self.regs[a.id] = self.regs[b.id] / self.regs[c.id]
-
             elif op == "POW":
                 self.regs[a.id] = self.regs[b.id] ** self.regs[c.id]
-
             elif op == "NEG":
                 self.regs[a.id] = -self.regs[b.id]
-
             elif op == "NOT":
                 self.regs[a.id] = not self.regs[b.id]
 
             # comparisons
             elif op == "EQ":
                 self.regs[a.id] = self.regs[b.id] == self.regs[c.id]
-
             elif op == "NE":
                 self.regs[a.id] = self.regs[b.id] != self.regs[c.id]
-
             elif op == "LT":
                 self.regs[a.id] = self.regs[b.id] < self.regs[c.id]
-
             elif op == "GT":
                 self.regs[a.id] = self.regs[b.id] > self.regs[c.id]
-
             elif op == "LE":
                 self.regs[a.id] = self.regs[b.id] <= self.regs[c.id]
-
             elif op == "GE":
                 self.regs[a.id] = self.regs[b.id] >= self.regs[c.id]
-            
             elif op == "AND":
                 self.regs[a.id] = self.regs[b.id] and self.regs[c.id]
 

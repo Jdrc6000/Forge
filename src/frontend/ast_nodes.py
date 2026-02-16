@@ -50,7 +50,7 @@ class If(AST):
 @dataclass
 class Compare(AST):
     left: AST
-    op: str
+    ops: list[str]
     comparators: List[AST]
 
 @dataclass

@@ -15,21 +15,46 @@ class LiveRange:
 def get_defs_uses(instr):
     if instr.op in ("LOAD_CONST", "LOAD_VAR"):
         return [instr.a], []
-    elif instr.op in ("ADD","SUB","MUL","DIV","POW"):
-        return [instr.a], [instr.b, instr.c]
-    elif instr.op in ("NEG","NOT","MOVE"):
+
+    # Arithmetic / comparisons that write to dest (a) and read b,c
+    elif instr.op in (
+        "ADD", "SUB", "MUL", "DIV", "POW",
+        "EQ", "NE", "LT", "GT", "LE", "GE", "AND",
+    ):
+        uses = []
+        if instr.b: uses.append(instr.b)
+        if instr.c: uses.append(instr.c)
+        return [instr.a], uses
+    
+    elif instr.op in ("NEG", "NOT", "MOVE"):
         return [instr.a], [instr.b]
+
     elif instr.op == "STORE_VAR":
         return [], [instr.b]
+
     elif instr.op in ("PRINT",):
         return [], [instr.a]
+
     elif instr.op in ("JUMP", "JUMP_IF_TRUE", "JUMP_IF_FALSE"):
-        return [], [instr.a] if instr.op == "JUMP_IF_TRUE" or instr.op == "JUMP_IF_FALSE" else []
+        return [], [instr.a] if instr.op in ("JUMP_IF_TRUE", "JUMP_IF_FALSE") else []
+
     elif instr.op == "SPILL_STORE":
         return [], [instr.b]
+
     elif instr.op == "SPILL_LOAD":
         return [instr.a], []
+
+    elif instr.op == "CALL":
+        # CALL defines instr.c (return value), uses arg_regs
+        defs = [instr.c] if instr.c else []
+        uses = instr.arg_regs if hasattr(instr, 'arg_regs') else []
+        return defs, uses
+
+    elif instr.op == "RETURN":
+        return [], [instr.a] if instr.a else []
+
     else:
+        print(f"Warning: unknown op in regalloc: {instr.op}")
         return [], []
 
 # Compute live ranges based on defs/uses
