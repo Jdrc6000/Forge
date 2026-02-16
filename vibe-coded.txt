@@ -683,6 +683,16 @@ class Parser():
             for comparator in node.comparators:
                 self.dump(comparator, indent + 1)
         
+        elif isinstance(node, FunctionDef):
+            print(f"{pad}FunctionDef({node.name})")
+            print(f"{pad}  Args:")
+            for arg in node.args:
+                self.dump(arg, indent + 2)
+            
+            print(f"{pad}  Body:")
+            for something in node.body:
+                self.dump(something, indent + 2)
+        
         else:
             print(f"{pad}{node}")
 
