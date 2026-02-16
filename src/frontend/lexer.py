@@ -1,4 +1,6 @@
-from src.frontend.tokens import *
+from src.frontend.token_maps import *
+from src.frontend.token import Token
+from src.frontend.token_types import *
 
 class Lexer():
     def __init__(self, text):
@@ -35,11 +37,11 @@ class Lexer():
 
         if count > self.indents[-1]:
             self.indents.append(count)
-            tokens.append(Token(tt_indent))
+            tokens.append(Token(TokenType.INDENT))
         else:
             while count < self.indents[-1]:
                 self.indents.pop()
-                tokens.append(Token(tt_dedent))
+                tokens.append(Token(TokenType.DEDENT))
     
     # had to crack this like the alan turing cracked cyphertext
     def number(self):
@@ -68,9 +70,9 @@ class Lexer():
             raise Exception("Expected number")
 
         if dot_count == 0:
-            return Token(tt_int, int(num_str))
+            return Token(TokenType.INT, int(num_str))
         elif dot_count == 1 and num_str[-1] != ".":
-            return Token(tt_float, float(num_str))
+            return Token(TokenType.FLOAT, float(num_str))
         else:
             # Optional: give better position info
             raise Exception(f"Invalid number format near position {start_pos}: '{num_str}'")
@@ -86,7 +88,7 @@ class Lexer():
         
         self.advance()
         
-        return Token(tt_string, string_val)
+        return Token(TokenType.STRING, string_val)
     
     def name(self):
         name_str = ""
@@ -95,9 +97,9 @@ class Lexer():
             name_str += self.current_char
             self.advance()
 
-        tok_type = keywords.get(name_str, tt_name)
+        tok_type = KEYWORDS.get(name_str, TokenType.NAME)
 
-        if tok_type == tt_name:
+        if tok_type == TokenType.NAME:
             return Token(tok_type, name_str)
         else:
             return Token(tok_type)
@@ -108,7 +110,7 @@ class Lexer():
         while self.current_char is not None:
             if self.current_char == "\n":
                 self.advance()
-                tokens.append(Token(tt_newline))
+                tokens.append(Token(TokenType.NEWLINE))
                 self.handle_indentation(tokens)
             
             elif self.current_char.isspace():
@@ -117,33 +119,33 @@ class Lexer():
             elif self.current_char == "!" and self.peek() == "=":
                 self.advance()
                 self.advance()
-                tokens.append(Token(tt_ne))
+                tokens.append(Token(TokenType.NE))
             elif self.current_char == "=" and self.peek() == "=":
                 self.advance()
                 self.advance()
-                tokens.append(Token(tt_ee))
+                tokens.append(Token(TokenType.EE))
             elif self.current_char == "<" and self.peek() == "=":
                 self.advance()
                 self.advance()
-                tokens.append(Token(tt_le))
+                tokens.append(Token(TokenType.LE))
             elif self.current_char == ">" and self.peek() == "=":
                 self.advance()
                 self.advance()
-                tokens.append(Token(tt_ge))
+                tokens.append(Token(TokenType.GE))
             elif self.current_char == ">":
                 self.advance()
-                tokens.append(Token(tt_greater))
+                tokens.append(Token(TokenType.GREATER))
             elif self.current_char == "<":
                 self.advance()
-                tokens.append(Token(tt_less))
+                tokens.append(Token(TokenType.LESS))
             
             elif self.current_char == "." and self.peek() == ".":
                 self.advance()
                 self.advance()
-                tokens.append(Token(tt_range))
+                tokens.append(Token(TokenType.RANGE))
             
-            elif self.current_char in single_char_tokens:
-                tok_type = single_char_tokens[self.current_char]
+            elif self.current_char in SINGLE_CHAR_TOKENS:
+                tok_type = SINGLE_CHAR_TOKENS[self.current_char]
                 tokens.append(Token(tok_type))
                 self.advance()
             
@@ -161,7 +163,7 @@ class Lexer():
         
         while len(self.indents) > 1:
             self.indents.pop()
-            tokens.append(Token(tt_dedent))
+            tokens.append(Token(TokenType.DEDENT))
         
-        tokens.append(Token(tt_eof))
+        tokens.append(Token(TokenType.EOF))
         return tokens

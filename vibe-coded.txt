@@ -1,6 +1,5 @@
 --- main.py ---
 from time import time
-
 from src.frontend.lexer import Lexer
 from src.frontend.parser import Parser
 from src.semantic.analyser import Analyser, SymbolTable
@@ -8,44 +7,33 @@ from src.optimiser.optimiser import Optimiser
 from src.ir.generator import IRGenerator
 from src.runtime.regalloc import linear_scan_allocate
 from src.runtime.vm import VM
-
 from src.ir.operands import Reg, Imm
-
 code = """
 fn check(a, b):
     if a == b:
         return true
     else:
         return false
-
 print(check(5, 5))
 """
-
 start = time()
-
 lexer = Lexer(code)
 tokens = lexer.get_tokens()
 print(tokens)
-
 parser = Parser(tokens)
 tree = parser.parse()
 parser.dump(tree)
-
 symbol_table = SymbolTable()
 semantic_analysis = Analyser(symbol_table)
 semantic_analysis.analyse(tree)
-
 optimiser = Optimiser()
 tree = optimiser.optimize(tree)
 parser.dump(tree)
-
 ir_generator = IRGenerator()
 ir_generator.generate(tree)
 ir_generator.ir.dump()
-
 num_regs = 1024
 allocated = linear_scan_allocate(ir_generator.ir.code, num_regs=num_regs)
-
 def fmt(x):
     if isinstance(x, Reg):
         return f"r{x.id}"
@@ -53,88 +41,71 @@ def fmt(x):
         return x.value
     return x
 for i, instr in enumerate(allocated):
-    print(f"realloc{i} {instr.op} {fmt(instr.a)} {fmt(instr.b)} {fmt(instr.c)}") #:04 to pad to 4 0's
-
+    print(f"realloc{i} {instr.op} {fmt(instr.a)} {fmt(instr.b)} {fmt(instr.c)}")
 vm = VM(num_regs=num_regs)
 vm.code = allocated
 start_ip = vm.find_label("__main__")
 vm.ip = start_ip
 vm.run(allocated)
 vm.dump_regs()
-
 print(f"took {time() - start} secs")
 
 --- src/frontend/ast_nodes.py ---
 from dataclasses import dataclass
 from typing import List, Optional, Any
-
 class AST():
     inferred_type = None
-
 @dataclass
 class Module():
     body: List[AST]
-
 @dataclass
 class Call(AST):
     func: AST
     args: List[AST]
-
 @dataclass
 class Assign(AST):
     target: AST
     value: AST
-
 @dataclass
 class Expr(AST):
     value: AST
-
 @dataclass
 class Name(AST):
     id: str
-
 @dataclass
 class Constant(AST):
     value: Any
-
 @dataclass
 class BinOp(AST):
     left: AST
     op: str
     right: AST
-
 @dataclass
 class UnOp(AST):
     op: str
     operand: AST
-
 @dataclass
 class If(AST):
     test: AST
     body: List[AST]
     orelse: Optional[List[AST]] = None
-
 @dataclass
 class Compare(AST):
     left: AST
     op: str
     comparators: List[AST]
-
 @dataclass
 class FunctionDef(AST):
     name: str
     args: list[str]
     body: list[AST]
-
 @dataclass
 class Return(AST):
     value: Optional[AST] = None
-
 @dataclass
 class While(AST):
     test: AST
     body: list[AST]
-
 @dataclass
 class For(AST):
     target: Name
@@ -143,54 +114,46 @@ class For(AST):
     body: list[AST]
 
 --- src/frontend/lexer.py ---
-from src.frontend.tokens import *
-
+from src.frontend.token_maps import *
+from src.frontend.token import Token
+from src.frontend.token_types import *
 class Lexer():
     def __init__(self, text):
         self.text = text
         self.pos = 0
         self.current_char = self.text[self.pos] if self.text else None
         self.indents = [0]
-    
     def advance(self):
         self.pos += 1
-        
         if self.pos < len(self.text):
             self.current_char = self.text[self.pos]
         else:
             self.current_char = None
-    
     def skip_whitespace(self):
         while self.current_char and self.current_char in " \t":
             self.advance()
-    
     def peek(self):
         if self.pos + 1 < len(self.text):
             return self.text[self.pos + 1]
         return None
-    
     def handle_indentation(self, tokens):
         count = 0
         while self.current_char == " ":
             count += 1
             self.advance()
-
         if self.current_char == "\n":
             return
-
         if count > self.indents[-1]:
             self.indents.append(count)
-            tokens.append(Token(tt_indent))
+            tokens.append(Token(TokenType.INDENT))
         else:
             while count < self.indents[-1]:
                 self.indents.pop()
-                tokens.append(Token(tt_dedent))
-    
+                tokens.append(Token(TokenType.DEDENT))
     def number(self):
         num_str = ""
         dot_count = 0
-        start_pos = self.pos  # optional: for better error messages
-
+        start_pos = self.pos
         while self.current_char and self.current_char in "0123456789.":
             if self.current_char == ".":
                 dot_count += 1
@@ -198,598 +161,472 @@ class Lexer():
                     next_char = self.peek()
                     next_next_char = self.text[self.pos + 2] if self.pos + 2 < len(self.text) else None
                     if next_char == ".":
-                        break  # leave the .. for the range rule
+                        break
                     if next_char is None or not next_char.isdigit():
                         break
-
             num_str += self.current_char
             self.advance()
-
         if not num_str:
             raise Exception("Expected number")
-
         if dot_count == 0:
-            return Token(tt_int, int(num_str))
+            return Token(TokenType.INT, int(num_str))
         elif dot_count == 1 and num_str[-1] != ".":
-            return Token(tt_float, float(num_str))
+            return Token(TokenType.FLOAT, float(num_str))
         else:
             raise Exception(f"Invalid number format near position {start_pos}: '{num_str}'")
-    
     def string(self):
         string_val = ""
         quote_char = self.current_char
-        self.advance() # skip opening quote
-        
+        self.advance()
         while self.current_char and self.current_char != quote_char:
             string_val += self.current_char
             self.advance()
-        
         self.advance()
-        
-        return Token(tt_string, string_val)
-    
+        return Token(TokenType.STRING, string_val)
     def name(self):
         name_str = ""
-
         while self.current_char and (self.current_char.isalnum() or self.current_char == "_"):
             name_str += self.current_char
             self.advance()
-
-        tok_type = keywords.get(name_str, tt_name)
-
-        if tok_type == tt_name:
+        tok_type = KEYWORDS.get(name_str, TokenType.NAME)
+        if tok_type == TokenType.NAME:
             return Token(tok_type, name_str)
         else:
             return Token(tok_type)
-    
     def get_tokens(self):
         tokens = []
-        
         while self.current_char is not None:
             if self.current_char == "\n":
                 self.advance()
-                tokens.append(Token(tt_newline))
+                tokens.append(Token(TokenType.NEWLINE))
                 self.handle_indentation(tokens)
-            
             elif self.current_char.isspace():
                 self.skip_whitespace()
-            
             elif self.current_char == "!" and self.peek() == "=":
                 self.advance()
                 self.advance()
-                tokens.append(Token(tt_ne))
+                tokens.append(Token(TokenType.NE))
             elif self.current_char == "=" and self.peek() == "=":
                 self.advance()
                 self.advance()
-                tokens.append(Token(tt_ee))
+                tokens.append(Token(TokenType.EE))
             elif self.current_char == "<" and self.peek() == "=":
                 self.advance()
                 self.advance()
-                tokens.append(Token(tt_le))
+                tokens.append(Token(TokenType.LE))
             elif self.current_char == ">" and self.peek() == "=":
                 self.advance()
                 self.advance()
-                tokens.append(Token(tt_ge))
+                tokens.append(Token(TokenType.GE))
             elif self.current_char == ">":
                 self.advance()
-                tokens.append(Token(tt_greater))
+                tokens.append(Token(TokenType.GREATER))
             elif self.current_char == "<":
                 self.advance()
-                tokens.append(Token(tt_less))
-            
+                tokens.append(Token(TokenType.LESS))
             elif self.current_char == "." and self.peek() == ".":
                 self.advance()
                 self.advance()
-                tokens.append(Token(tt_range))
-            
-            elif self.current_char in single_char_tokens:
-                tok_type = single_char_tokens[self.current_char]
+                tokens.append(Token(TokenType.RANGE))
+            elif self.current_char in SINGLE_CHAR_TOKENS:
+                tok_type = SINGLE_CHAR_TOKENS[self.current_char]
                 tokens.append(Token(tok_type))
                 self.advance()
-            
             elif self.current_char.isdigit():
                 tokens.append(self.number())
-            
             elif self.current_char.isalpha() or self.current_char == "_":
                 tokens.append(self.name())
-            
             elif self.current_char in "\"'":
                 tokens.append(self.string())
-            
             else:
                 raise Exception(f"Illegal character: {self.current_char}")
-        
         while len(self.indents) > 1:
             self.indents.pop()
-            tokens.append(Token(tt_dedent))
-        
-        tokens.append(Token(tt_eof))
+            tokens.append(Token(TokenType.DEDENT))
+        tokens.append(Token(TokenType.EOF))
         return tokens
 
 --- src/frontend/parser.py ---
 from src.frontend.tokens import *
+from src.frontend.token_types import *
 from src.frontend.ast_nodes import *
-
 class Parser():
     def __init__(self, tokens):
         self.tokens = tokens
         self.pos = 0
         self.current_token = self.tokens[self.pos]
-    
     def advance(self):
         self.pos += 1
-        
         if self.pos < len(self.tokens):
             self.current_token = self.tokens[self.pos]
         else:
-            self.current_token = Token("EOF")
-    
+            self.current_token = Token(TokenType.EOF)
     def peek(self):
         if self.pos + 1 < len(self.tokens):
             return self.tokens[self.pos + 1]
         return None
-    
     def skip_newlines(self):
-        while self.current_token.type == "NEWLINE":
+        while self.current_token.type == TokenType.NEWLINE:
             self.advance()
-    
     def parse(self):
         body = []
-
-        while self.current_token.type != "EOF":
+        while self.current_token.type != TokenType.EOF:
             self.skip_newlines()
-            if self.current_token.type == "EOF":
+            if self.current_token.type == TokenType.EOF:
                 break
             body.append(self.statement())
-
         return Module(body)
-    
     def statement(self):
-        if self.current_token.type == "PRINT":
+        if self.current_token.type == TokenType.PRINT:
             return self.parse_print()
-        elif self.current_token.type == "IF":
+        elif self.current_token.type == TokenType.IF:
             return self.parse_if()
-        elif self.current_token.type == "NAME":
-            if self.peek() and self.peek().type == "LPAREN":
+        elif self.current_token.type == TokenType.NAME:
+            if self.peek() and self.peek().type == TokenType.LPAREN:
                 return self.parse_call()
-            elif self.peek() and self.peek().type == "EQ":
+            elif self.peek() and self.peek().type == TokenType.EQ:
                 return self.parse_assign()
             else:
                 return Expr(Name(self.current_token.value))
-        elif self.current_token.type == "FN":
+        elif self.current_token.type == TokenType.FN:
             return self.parse_function()
-        elif self.current_token.type == "WHILE":
+        elif self.current_token.type == TokenType.WHILE:
             return self.parse_while()
-        elif self.current_token.type == "FOR":
+        elif self.current_token.type == TokenType.FOR:
             return self.parse_for()
-        elif self.current_token.type == "RETURN":
+        elif self.current_token.type == TokenType.RETURN:
             return self.parse_return()
         else:
             return Expr(self.parse_expr())
-    
     def parse_print(self):
         self.advance()
-        if self.current_token.type != "LPAREN":
+        if self.current_token.type != TokenType.LPAREN:
             raise Exception("Expected '(' after print")
         self.advance()
-        
         expr_node = self.parse_expr()
-        
-        if self.current_token.type != "RPAREN":
+        if self.current_token.type != TokenType.RPAREN:
             raise Exception("Expected ')' after print argument")
         self.advance()
-        
         return Call(
-            func=Name("print"), # because it makes the interpreter happy
+            func=Name("print"),
             args=[expr_node]
         )
-    
     def parse_if(self):
-        self.advance()  # skip 'if'
+        self.advance()
         test = self.parse_expr()
-
-        if self.current_token.type != "COLON":
+        if self.current_token.type != TokenType.COLON:
             raise Exception("Expected ':' after if condition")
         self.advance()
-
-        if self.current_token.type != "NEWLINE":
+        if self.current_token.type != TokenType.NEWLINE:
             raise Exception("Expected newline after ':'")
         self.advance()
-
-        if self.current_token.type != "INDENT":
+        if self.current_token.type != TokenType.INDENT:
             raise Exception("Expected indent")
         self.advance()
-
         body = []
-
         while True:
             self.skip_newlines()
-            if self.current_token.type == "DEDENT":
+            if self.current_token.type == TokenType.DEDENT:
                 break
             body.append(self.statement())
-
-        if self.current_token.type == "DEDENT" and self.peek() and self.peek().type == "ELSE":
-            self.advance()      # DEDENT
-            self.advance()      # ELSE
-
-            if self.current_token.type != "COLON":
+        if self.current_token.type == TokenType.DEDENT and self.peek() and self.peek().type == TokenType.ELSE:
+            self.advance()
+            self.advance()
+            if self.current_token.type != TokenType.COLON:
                 raise Exception("Expected ':' after else")
             self.advance()
-
-            if self.current_token.type != "NEWLINE":
+            if self.current_token.type != TokenType.NEWLINE:
                 raise Exception("Expected newline after ':'")
             self.advance()
-
-            if self.current_token.type != "INDENT":
+            if self.current_token.type != TokenType.INDENT:
                 raise Exception("Expected indent in else block")
-            self.advance()  # consume INDENT
-
+            self.advance()
             else_body = []
             while True:
                 self.skip_newlines()
-                if self.current_token.type == "DEDENT":
+                if self.current_token.type == TokenType.DEDENT:
                     break
                 else_body.append(self.statement())
-            self.advance()  # consume DEDENT at end of else
+            self.advance()
             return If(test, body, else_body)
         else:
-            self.advance()  # consume DEDENT
+            self.advance()
             return If(test, body)
-    
     def parse_assign(self):
         name_token = self.current_token
         self.advance()
-        
-        if self.current_token.type != "EQ":
+        if self.current_token.type != TokenType.EQ:
             raise Exception("Expected '=' after variable name")
         self.advance()
-        
         value_node = self.parse_expr()
-        
         return Assign(
             target=Name(name_token.value),
             value=value_node
         )
-    
     def parse_comparison(self):
         left = self.parse_binop()
         comparators = []
         ops = []
-
-        while self.current_token.type in ("EE","NE","LESS","GREATER","LE","GE"):
+        while self.current_token.type in (
+            TokenType.EE, TokenType.NE, TokenType.LESS,
+            TokenType.GREATER, TokenType.LE, TokenType.GE
+        ):
             ops.append(self.current_token.type)
             self.advance()
             comparators.append(self.parse_binop())
-
         if ops:
             return Compare(left, ops[0], comparators)
-
         return left
-    
     def parse_logic_or(self):
         left = self.parse_logic_and()
-        
-        while self.current_token.type == "OR":
+        while self.current_token.type == TokenType.OR:
             self.advance()
             right = self.parse_logic_and()
             left = BinOp(left, "or", right)
-        
         return left
-
     def parse_logic_and(self):
         left = self.parse_comparison()
-        
-        while self.current_token.type == "AND":
+        while self.current_token.type == TokenType.AND:
             self.advance()
             right = self.parse_comparison()
             left = BinOp(left, "and", right)
-        
         return left
-    
     def parse_expr(self):
         return self.parse_logic_or()
-    
     def parse_binop(self, min_prec=0):
         left = self.parse_unary()
-        
         while True:
             op_token = self.current_token
-            
-            if op_token.type in ("PLUS", "MINUS", "MUL", "DIV", "POW"):
+            if op_token.type in (
+                TokenType.PLUS, TokenType.MINUS, TokenType.MUL,
+                TokenType.DIV, TokenType.POW
+            ):
                 prec = self.get_precedence(op_token)
-                
                 if prec < min_prec:
                     break
                 self.advance()
-                
                 right = self.parse_binop(prec+1)
                 left = BinOp(
                     left=left,
                     op=self.token_to_op(op_token),
                     right=right
                 )
-
             else:
                 break
-        
         return left
-    
     def parse_unary(self):
         tok = self.current_token
-        if tok.type in ("PLUS", "MINUS"):
+        if tok.type in (TokenType.PLUS, TokenType.MINUS):
             self.advance()
             return UnOp(op=self.token_to_op(tok), operand=self.parse_unary())
-        elif tok.type == "NOT":
+        elif tok.type == TokenType.NOT:
             self.advance()
             return UnOp(op="not", operand=self.parse_unary())
         else:
             return self.parse_primary()
-    
     def parse_primary(self):
         tok = self.current_token
-        
-        if tok.type == "INT" or tok.type == "FLOAT":
+        if tok.type == TokenType.INT or tok.type == TokenType.FLOAT:
             self.advance()
             return Constant(tok.value)
-        
-        elif tok.type == "NAME":
+        elif tok.type == TokenType.NAME:
             self.advance()
             node = Name(tok.value)
-
-            if self.current_token.type == "LPAREN":
-                self.advance()  # skip '('
+            if self.current_token.type == TokenType.LPAREN:
+                self.advance()
                 args = []
-
-                if self.current_token.type != "RPAREN":
+                if self.current_token.type != TokenType.RPAREN:
                     while True:
                         args.append(self.parse_expr())
-                        if self.current_token.type == "COMMA":
+                        if self.current_token.type == TokenType.COMMA:
                             self.advance()
-                        elif self.current_token.type == "RPAREN":
+                        elif self.current_token.type == TokenType.RPAREN:
                             break
                         else:
                             raise Exception("Expected ',' or ')' in argument list")
-
-                self.advance()  # skip ')'
+                self.advance()
                 return Call(node, args)
-
             return node
-        
-        elif tok.type == "NAME":
+        elif tok.type == TokenType.LPAREN:
             self.advance()
-            return Name(tok.value)
-
-        elif tok.type == "LPAREN":
-            self.advance()
-            if self.current_token.type == "RPAREN":
+            if self.current_token.type == TokenType.RPAREN:
                 expr = Constant(None)
             else:
                 expr = self.parse_expr()
-            
-            if self.current_token.type != "RPAREN":
+            if self.current_token.type != TokenType.RPAREN:
                 raise Exception("Expected ')' after expression")
             self.advance()
             return expr
-        
-        elif tok.type == "TRUE":
+        elif tok.type == TokenType.TRUE:
             self.advance()
             return Constant(True)
-
-        elif tok.type == "FALSE":
+        elif tok.type == TokenType.FALSE:
             self.advance()
             return Constant(False)
-        
         else:
             raise Exception(f"Unexpected token: {tok}")
-    
     def parse_function(self):
-        self.advance() # skip fn
-        
-        if self.current_token.type != "NAME":
+        self.advance()
+        if self.current_token.type != TokenType.NAME:
             raise Exception("Expected function name")
         func_name = self.current_token.value
         self.advance()
-        
-        if self.current_token.type != "LPAREN":
+        if self.current_token.type != TokenType.LPAREN:
             raise Exception("Expected '(' after function name")
-        self.advance()  # skip '('
-
+        self.advance()
         args = []
-        if self.current_token.type != "RPAREN":
+        if self.current_token.type != TokenType.RPAREN:
             while True:
-                if self.current_token.type != "NAME":
+                if self.current_token.type != TokenType.NAME:
                     raise Exception("Expected argument name")
                 args.append(self.current_token.value)
                 self.advance()
-                if self.current_token.type == "RPAREN":
+                if self.current_token.type == TokenType.RPAREN:
                     break
-                elif self.current_token.type == "COMMA":
+                elif self.current_token.type == TokenType.COMMA:
                     self.advance()
                 else:
                     raise Exception("Expected ',' or ')' in argument list")
-
-        self.advance()  # skip )
-        
-        if self.current_token.type != "COLON":
+        self.advance()
+        if self.current_token.type != TokenType.COLON:
             raise Exception("Expected ':' after function header")
         self.advance()
-        
-        if self.current_token.type != "NEWLINE":
+        if self.current_token.type != TokenType.NEWLINE:
             raise Exception("Expected newline after ':'")
         self.advance()
-        
-        if self.current_token.type != "INDENT":
+        if self.current_token.type != TokenType.INDENT:
             raise Exception("Expected indent in function body")
         self.advance()
-        
         body = []
-        while self.current_token.type != "DEDENT":
+        while self.current_token.type != TokenType.DEDENT:
             self.skip_newlines()
-            if self.current_token.type == "DEDENT":
+            if self.current_token.type == TokenType.DEDENT:
                 break
             body.append(self.statement())
-        
         self.advance()
         return FunctionDef(func_name, args, body)
-    
     def parse_while(self):
-        self.advance()  # skip 'while'
+        self.advance()
         test = self.parse_expr()
-
-        if self.current_token.type != "COLON":
+        if self.current_token.type != TokenType.COLON:
             raise Exception("Expected ':' after while condition")
         self.advance()
-
-        if self.current_token.type != "NEWLINE":
+        if self.current_token.type != TokenType.NEWLINE:
             raise Exception("Expected newline after ':'")
         self.advance()
-
-        if self.current_token.type != "INDENT":
+        if self.current_token.type != TokenType.INDENT:
             raise Exception("Expected indent in while body")
         self.advance()
-
         body = []
-        while self.current_token.type != "DEDENT":
+        while self.current_token.type != TokenType.DEDENT:
             self.skip_newlines()
-            if self.current_token.type == "DEDENT":
+            if self.current_token.type == TokenType.DEDENT:
                 break
             body.append(self.statement())
-
-        self.advance()  # consume DEDENT
+        self.advance()
         return While(test, body)
-    
     def parse_call(self):
         func_name = self.current_token.value
-        self.advance()  # skip function name
-
-        if self.current_token.type != "LPAREN":
+        self.advance()
+        if self.current_token.type != TokenType.LPAREN:
             raise Exception("Expected '(' in function call")
-        self.advance()  # skip '('
-
+        self.advance()
         args = []
-        if self.current_token.type != "RPAREN":
+        if self.current_token.type != TokenType.RPAREN:
             while True:
                 args.append(self.parse_expr())
-                if self.current_token.type == "COMMA":
+                if self.current_token.type == TokenType.COMMA:
                     self.advance()
-                elif self.current_token.type == "RPAREN":
+                elif self.current_token.type == TokenType.RPAREN:
                     break
                 else:
                     raise Exception("Expected ',' or ')' in argument list")
-        self.advance()  # skip ')'
+        self.advance()
         return Call(Name(func_name), args)
-
     def parse_for(self):
-        self.advance()  # skip 'for'
-
-        if self.current_token.type != "NAME":
+        self.advance()
+        if self.current_token.type != TokenType.NAME:
             raise Exception("Expected loop variable name")
         loop_var = Name(self.current_token.value)
         self.advance()
-
-        if self.current_token.type != "IN":
+        if self.current_token.type != TokenType.IN:
             raise Exception("Expected 'in' in for loop")
         self.advance()
-
         start = self.parse_expr()
-
-        if self.current_token.type != "RANGE":
+        if self.current_token.type != TokenType.RANGE:
             raise Exception("Expected '..' in for loop")
         self.advance()
-
         end = self.parse_expr()
-
-        if self.current_token.type != "COLON":
+        if self.current_token.type != TokenType.COLON:
             raise Exception("Expected ':' after for header")
         self.advance()
-
-        if self.current_token.type != "NEWLINE":
+        if self.current_token.type != TokenType.NEWLINE:
             raise Exception("Expected newline after ':'")
         self.advance()
-
-        if self.current_token.type != "INDENT":
+        if self.current_token.type != TokenType.INDENT:
             raise Exception("Expected indent in for body")
         self.advance()
-
         body = []
-        while self.current_token.type != "DEDENT":
+        while self.current_token.type != TokenType.DEDENT:
             self.skip_newlines()
-            if self.current_token.type == "DEDENT":
+            if self.current_token.type == TokenType.DEDENT:
                 break
             body.append(self.statement())
-
-        self.advance()  # consume DEDENT
+        self.advance()
         return For(loop_var, start, end, body)
-
     def parse_return(self):
-        self.advance()  # consume 'return'
-
-        if self.current_token.type in ("NEWLINE", "DEDENT"):
+        self.advance()
+        if self.current_token.type in (TokenType.NEWLINE, TokenType.DEDENT):
             return Return(None)
-
         value = self.parse_expr()
         return Return(value)
-    
     def token_to_op(self, token):
         mapping = {
-            "PLUS": "+",
-            "MINUS": "-",
-            "MUL": "*",
-            "DIV": "/",
-            "POW": "^"
+            TokenType.PLUS: "+",
+            TokenType.MINUS: "-",
+            TokenType.MUL: "*",
+            TokenType.DIV: "/",
+            TokenType.POW: "^"
         }
-        
         return mapping[token.type]
-    
     def get_precedence(self, token):
         prec = {
-            "PLUS": 1,
-            "MINUS": 1,
-            "MUL": 2,
-            "DIV": 2,
-            "POW": 3
+            TokenType.PLUS: 1,
+            TokenType.MINUS: 1,
+            TokenType.MUL: 2,
+            TokenType.DIV: 2,
+            TokenType.POW: 3
         }
-        
         return prec[token.type]
-    
     def dump(self, node, indent=0):
         pad = "  " * indent
-
         if isinstance(node, Module):
             print(f"{pad}Module")
             for stmt in node.body:
                 self.dump(stmt, indent + 1)
-        
         elif isinstance(node, Expr):
             print(f"{pad}Expr")
             self.dump(node.value, indent + 1)
-        
         elif isinstance(node, Call):
             print(f"{pad}Call")
             self.dump(node.func, indent + 1)
             for arg in node.args:
                 self.dump(arg, indent + 1)
-        
         elif isinstance(node, Name):
             print(f"{pad}Name({node.id})")
-        
         elif isinstance(node, Constant):
             print(f"{pad}Constant({node.value})")
-        
         elif isinstance(node, Assign):
             print(f"{pad}Assign")
             self.dump(node.target, indent + 1)
             self.dump(node.value, indent + 1)
-        
         elif isinstance(node, BinOp):
             print(f"{pad}BinaryOp({node.op})")
             self.dump(node.left, indent + 1)
             self.dump(node.right, indent + 1)
-        
         elif isinstance(node, UnOp):
             print(f"{pad}UnaryOp({node.op})")
             self.dump(node.operand, indent + 1)
-        
         elif isinstance(node, If):
             print(f"{pad}If")
             self.dump(node.test, indent + 1)
@@ -800,42 +637,127 @@ class Parser():
                 print(f"{pad}  Else:")
                 for line in node.orelse:
                     self.dump(line, indent + 2)
-        
         elif isinstance(node, Compare):
             print(f"{pad}Compare({node.op})")
             self.dump(node.left, indent + 1)
             for comparator in node.comparators:
                 self.dump(comparator, indent + 1)
-        
         elif isinstance(node, FunctionDef):
             print(f"{pad}FunctionDef({node.name})")
             print(f"{pad}  Args:")
             for arg in node.args:
                 self.dump(arg, indent + 2)
-            
             print(f"{pad}  Body:")
-            for something in node.body: # chat remind me to change this
+            for something in node.body:
                 self.dump(something, indent + 2)
-        
         elif isinstance(node, While):
             print(f"{pad}While")
             self.dump(node.test, indent + 1)
-            
             print(f"{pad}  Body:")
-            for something in node.body: # chat also remind me to change this
+            for something in node.body:
                 self.dump(something, indent + 2)
-        
         elif isinstance(node, For):
             print(f"{pad}For({node.target.id})")
             self.dump(node.start, indent + 1)
             self.dump(node.end, indent + 1)
-            
             print(f"{pad}  Body:")
-            for something in node.body: # chat also also remind me to change this
+            for something in node.body:
                 self.dump(something, indent + 2)
-        
         else:
             print(f"{pad}{node}")
+
+--- src/frontend/token.py ---
+from dataclasses import dataclass
+from src.frontend.token_types import TokenType
+from typing import Any, Optional
+@dataclass
+class Token:
+    type: TokenType
+    value: Optional[Any] = None
+    line: int = 0
+    column: int = 0
+    def __repr__(self):
+        if self.value is not None:
+            return f"{self.type.name}:{self.value}"
+        return f"{self.type.name}"
+
+--- src/frontend/token_maps.py ---
+from src.frontend.token_types import TokenType
+KEYWORDS = {
+    "if": TokenType.IF,
+    "else": TokenType.ELSE,
+    "print": TokenType.PRINT,
+    "and": TokenType.AND,
+    "or": TokenType.OR,
+    "not": TokenType.NOT,
+    "true": TokenType.TRUE,
+    "false": TokenType.FALSE,
+    "fn": TokenType.FN,
+    "while": TokenType.WHILE,
+    "for": TokenType.FOR,
+    "in": TokenType.IN,
+    "return": TokenType.RETURN,
+}
+SINGLE_CHAR_TOKENS = {
+    "+": TokenType.PLUS,
+    "-": TokenType.MINUS,
+    "*": TokenType.MUL,
+    "/": TokenType.DIV,
+    "^": TokenType.POW,
+    "(": TokenType.LPAREN,
+    ")": TokenType.RPAREN,
+    "=": TokenType.EQ,
+    "!": TokenType.BANG,
+    "<": TokenType.LESS,
+    ">": TokenType.GREATER,
+    ",": TokenType.COMMA,
+    ":": TokenType.COLON,
+    ".": TokenType.DOT,
+}
+
+--- src/frontend/token_types.py ---
+from enum import Enum, auto
+class TokenType(Enum):
+    INT = auto()
+    FLOAT = auto()
+    STRING = auto()
+    NAME = auto()
+    PLUS = auto()
+    MINUS = auto()
+    MUL = auto()
+    DIV = auto()
+    POW = auto()
+    LPAREN = auto()
+    RPAREN = auto()
+    EQ = auto()
+    BANG = auto()
+    LESS = auto()
+    GREATER = auto()
+    NE = auto()
+    EE = auto()
+    LE = auto()
+    GE = auto()
+    COMMA = auto()
+    COLON = auto()
+    NEWLINE = auto()
+    INDENT = auto()
+    DEDENT = auto()
+    EOF = auto()
+    IF = auto()
+    ELSE = auto()
+    PRINT = auto()
+    AND = auto()
+    OR = auto()
+    NOT = auto()
+    TRUE = auto()
+    FALSE = auto()
+    FN = auto()
+    WHILE = auto()
+    FOR = auto()
+    IN = auto()
+    RANGE = auto()
+    RETURN = auto()
+    DOT = auto()
 
 --- src/frontend/tokens.py ---
 tt_int = "INT"
@@ -878,7 +800,6 @@ tt_dot = "."
 tt_in = "IN"
 tt_range = "RANGE"
 tt_return = "RETURN"
-
 keywords = {
     "if": tt_if,
     "else": tt_else,
@@ -888,13 +809,12 @@ keywords = {
     "not": tt_not,
     "true": tt_true,
     "false": tt_false,
-    "fn": tt_fn, # functions
+    "fn": tt_fn,
     "while": tt_while,
     "for": tt_for,
     "in": tt_in,
     "return": tt_return
 }
-
 single_char_tokens = {
     "+": tt_plus,
     "-": tt_minus,
@@ -911,7 +831,6 @@ single_char_tokens = {
     ":": tt_colon,
     ".": tt_dot
 }
-
 binops = {
     "+": "ADD",
     "-": "SUB",
@@ -919,7 +838,6 @@ binops = {
     "/": "DIV",
     "^": "POW"
 }
-
 cmp = {
     "EE": "EQ",
     "NE": "NE",
@@ -928,12 +846,10 @@ cmp = {
     "LE": "LE",
     "GE": "GE"
 }
-
 class Token():
     def __init__(self, _type, value=None):
         self.type = _type
         self.value = value
-        
     def __repr__(self):
         if self.value is not None:
             return f"{self.type}:{self.value}"
@@ -944,48 +860,36 @@ from src.frontend.ast_nodes import *
 from src.frontend.tokens import *
 from src.ir.ir import IR, Instr
 from src.ir.operands import Imm
-
 class IRGenerator:
     def __init__(self):
         self.ir = IR()
-    
     def generate(self, node):
         method = f"gen_{type(node).__name__}"
         return getattr(self, method)(node)
-    
     def gen_Module(self, node):
         self.ir.emit("LABEL", "__main__")
-        
         for stmt in node.body:
             if not isinstance(stmt, FunctionDef):
                 self.generate(stmt)
-
         jmp = len(self.ir.code)
         self.ir.emit("JUMP", None)
-
         for stmt in node.body:
             if isinstance(stmt, FunctionDef):
                 self.generate(stmt)
-        
         self.ir.code[jmp].a = len(self.ir.code)
-    
     def gen_Expr(self, node):
         return self.generate(node.value)
-    
     def gen_Constant(self, node):
         r = self.ir.new_reg()
         self.ir.emit("LOAD_CONST", r, Imm(node.value))
         return r
-    
     def gen_Name(self, node):
         r = self.ir.new_reg()
         self.ir.emit("LOAD_VAR", r, node.id)
         return r
-    
     def gen_Assign(self, node):
         value_reg = self.generate(node.value)
         self.ir.emit("STORE_VAR", node.target.id, value_reg)
-    
     def gen_Call(self, node):
         if node.func.id == "print":
             arg_regs = [self.generate(a) for a in node.args]
@@ -996,171 +900,123 @@ class IRGenerator:
             dest = self.ir.new_reg()
             instr = Instr("CALL", node.func.id, dest)
             instr.arg_regs = arg_regs
-            instr.param_names = []  # will be resolved at runtime from FunctionDef label
+            instr.param_names = []
             self.ir.code.append(instr)
-            
             return dest
-    
     def gen_If(self, node):
         test = self.generate(node.test)
-
         jmp_false = len(self.ir.code)
         self.ir.emit("JUMP_IF_FALSE", test, None)
-
         for stmt in node.body:
             self.generate(stmt)
-
         if node.orelse:
             jmp_end = len(self.ir.code)
             self.ir.emit("JUMP", None)
-
             self.ir.code[jmp_false].b = len(self.ir.code)
-
             for stmt in node.orelse:
                 self.generate(stmt)
-
             self.ir.code[jmp_end].a = len(self.ir.code)
         else:
             self.ir.code[jmp_false].b = len(self.ir.code)
-    
     def gen_Compare(self, node):
         left = self.generate(node.left)
-
         result = None
         current_left = left
-
         for comp in node.comparators:
             right = self.generate(comp)
             dest = self.ir.new_reg()
-            
             opcode = cmp.get(node.op)
             if not opcode:
                 raise RuntimeError(f"Unsupported comparison {node.op}")
             self.ir.emit(opcode, dest, left, right)
-
             if result is None:
                 result = dest
             else:
                 tmp = self.ir.new_reg()
                 self.ir.emit("AND", tmp, result, dest)
                 result = tmp
-
             current_left = right
-
         return result
-    
     def gen_BinOp(self, node):
         if node.op in ("and", "or"):
             return self.gen_logic(node)
-
         left = self.generate(node.left)
         right = self.generate(node.right)
-
         dest = left
         self.ir.emit(binops[node.op], dest, left, right)
         return dest
-    
     def gen_logic(self, node):
         left = self.generate(node.left)
         dest = self.ir.new_reg()
-
         self.ir.emit("MOVE", dest, left)
-
         if node.op == "and":
             jmp = len(self.ir.code)
             self.ir.emit("JUMP_IF_FALSE", dest, None)
-
             right = self.generate(node.right)
             self.ir.emit("MOVE", dest, right)
-
             self.ir.code[jmp].b = len(self.ir.code)
-
-        else: # or
+        else:
             jmp = len(self.ir.code)
             self.ir.emit("JUMP_IF_TRUE", dest, None)
-
             right = self.generate(node.right)
             self.ir.emit("MOVE", dest, right)
-
             self.ir.code[jmp].b = len(self.ir.code)
-
         return dest
-    
     def gen_UnOp(self, node):
         src = self.generate(node.operand)
         dest = self.ir.new_reg()
-
         if node.op == "-":
             self.ir.emit("NEG", dest, src)
         elif node.op == "not":
             self.ir.emit("NOT", dest, src)
         else:
             self.ir.emit("MOVE", dest, src)
-
         return dest
-    
     def gen_FunctionDef(self, node):
         instr = Instr("LABEL", node.name)
         instr.param_names = node.args
         self.ir.code.append(instr)
-        
         for stmt in node.body:
             self.generate(stmt)
-        
         default_reg = self.ir.new_reg()
         self.ir.emit("LOAD_CONST", default_reg, Imm(0))
         self.ir.emit("RETURN", default_reg)
-    
     def gen_Return(self, node):
         if node.value:
             reg = self.generate(node.value)
         else:
             reg = self.ir.new_reg()
             self.ir.emit("LOAD_CONST", reg, Imm(0))
-
         self.ir.emit("RETURN", reg)
-    
     def gen_While(self, node):
-        start_label = len(self.ir.code)       # start of loop
+        start_label = len(self.ir.code)
         test_reg = self.generate(node.test)
-
         jmp_exit = len(self.ir.code)
-        self.ir.emit("JUMP_IF_FALSE", test_reg, None)  # exit if false
-
+        self.ir.emit("JUMP_IF_FALSE", test_reg, None)
         for stmt in node.body:
             self.generate(stmt)
-
-        self.ir.emit("JUMP", start_label)      # jump back to start
-        self.ir.code[jmp_exit].b = len(self.ir.code)  # patch exit
-    
+        self.ir.emit("JUMP", start_label)
+        self.ir.code[jmp_exit].b = len(self.ir.code)
     def gen_For(self, node):
         start_reg = self.generate(node.start)
         end_reg = self.generate(node.end)
-
         var_reg = self.ir.new_reg()
         self.ir.emit("MOVE", var_reg, start_reg)
         self.ir.emit("STORE_VAR", node.target.id, var_reg)
-
-        loop_start = len(self.ir.code)  # start of loop
-
+        loop_start = len(self.ir.code)
         loop_var_reg = self.ir.new_reg()
         self.ir.emit("LOAD_VAR", loop_var_reg, node.target.id)
-
         cmp_reg = self.ir.new_reg()
-        self.ir.emit("LT", cmp_reg, loop_var_reg, end_reg)  # loop while var < end
-
+        self.ir.emit("LT", cmp_reg, loop_var_reg, end_reg)
         jmp_exit = len(self.ir.code)
         self.ir.emit("JUMP_IF_FALSE", cmp_reg, None)
-
         for stmt in node.body:
             self.generate(stmt)
-
         self.ir.emit("LOAD_VAR", var_reg, node.target.id)
         one_reg = self.ir.new_reg()
         self.ir.emit("LOAD_CONST", one_reg, Imm(1))
         self.ir.emit("ADD", var_reg, var_reg, one_reg)
         self.ir.emit("STORE_VAR", node.target.id, var_reg)
-
         self.ir.emit("JUMP", loop_start)
         self.ir.code[jmp_exit].b = len(self.ir.code)
 
@@ -1168,27 +1024,22 @@ class IRGenerator:
 from src.ir.operands import Reg, Imm
 from dataclasses import dataclass
 from typing import Any, List
-
 @dataclass
 class Instr:
     op: str
     a: Reg | Imm | None = None
     b: Reg | Imm | None = None
     c: Reg | Imm | None = None
-
 class IR:
     def __init__(self):
         self.code: List[Instr] = []
         self.reg = 0
-    
     def new_reg(self):
         r = Reg(self.reg)
         self.reg += 1
         return r
-    
     def emit(self, op, a=None, b=None, c=None):
         self.code.append(Instr(op, a, b, c))
-    
     def dump(self):
         def fmt(x):
             if isinstance(x, Reg):
@@ -1196,32 +1047,27 @@ class IR:
             if isinstance(x, Imm):
                 return x.value
             return x
-        
         for i, instr in enumerate(self.code):
-            print(f"{i} {instr.op} {fmt(instr.a)} {fmt(instr.b)} {fmt(instr.c)}") #:04 to pad to 4 0's
+            print(f"{i} {instr.op} {fmt(instr.a)} {fmt(instr.b)} {fmt(instr.c)}")
 
 --- src/ir/operands.py ---
 from dataclasses import dataclass
 from typing import Any
-
 @dataclass(frozen=True)
 class Reg:
     id: int
-
 @dataclass(frozen=True)
 class Imm:
     value: Any
 
 --- src/optimiser/optimiser.py ---
 from src.optimiser.passes import ConstantFolder, DeadCodeEliminator
-
 class Optimiser:
     def __init__(self):
         self.passes = [
             ConstantFolder(),
             DeadCodeEliminator(),
         ]
-
     def optimize(self, tree):
         for p in self.passes:
             tree = p.run(tree)
@@ -1229,16 +1075,19 @@ class Optimiser:
 
 --- src/optimiser/passes.py ---
 from src.frontend.ast_nodes import Constant, BinOp, UnOp, If
-
 class Pass:
     def run(self, node):
         method = f"visit_{type(node).__name__}"
-        return getattr(self, method, self.generic)(node)
-
+        if hasattr(self, method):
+            return getattr(self, method, self.generic)(node)
+        else:
+            return self.generic(node)
     def generic(self, node):
+        method = f"visit_{type(node).__name__}"
+        if hasattr(self, method):
+            return getattr(self, method)(node)
         if not hasattr(node, "__dict__"):
             return node
-        
         for field, value in vars(node).items():
             if isinstance(value, list):
                 new_list = []
@@ -1249,22 +1098,17 @@ class Pass:
                     else:
                         new_list.append(result)
                 setattr(node, field, new_list)
-
             elif hasattr(value, "__dict__"):
                 result = self.run(value)
                 setattr(node, field, result)
-
         return node
-
 class ConstantFolder(Pass):
     def visit_BinOp(self, node):
         node.left = self.run(node.left)
         node.right = self.run(node.right)
-        
         if isinstance(node.left, Constant) and isinstance(node.right, Constant):
             l = node.left.value
             r = node.right.value
-            
             if node.op == "+": return Constant(l + r)
             if node.op == "-": return Constant(l - r)
             if node.op == "*": return Constant(l * r)
@@ -1272,70 +1116,53 @@ class ConstantFolder(Pass):
             if node.op == "^": return Constant(l ** r)
             if node.op == "and": return Constant(l and r)
             if node.op == "or": return Constant(l or r)
-        
         return node
-    
     def visit_UnOp(self, node):
         node.operand = self.run(node.operand)
-        
         if isinstance(node.operand, Constant):
             val = node.operand.value
-            
             if node.op == "-":
                 return Constant(-val)
-            
             if node.op == "not":
                 return Constant(not val)
-        
         return node
-    
     def visit_Compare(self, node):
         node.left = self.run(node.left)
         node.comparators = [self.run(c) for c in node.comparators]
-
         if isinstance(node.left, Constant) and isinstance(node.comparators[0], Constant):
             l = node.left.value
             r = node.comparators[0].value
-
             if node.op == "EE": return Constant(l == r)
             if node.op == "NE": return Constant(l != r)
             if node.op == "LESS": return Constant(l < r)
             if node.op == "GREATER": return Constant(l > r)
             if node.op == "LE": return Constant(l <= r)
             if node.op == "GE": return Constant(l >= r)
-
         return node
-
 class DeadCodeEliminator(Pass):
     def visit_If(self, node):
         node.test = self.run(node.test)
-        
         if isinstance(node.test, Constant):
             if node.test.value:
                 return [self.run(stmt) for stmt in node.body]
             else:
                 return [self.run(stmt) for stmt in (node.orelse or [])]
-        
         node.body = [self.run(s) for s in node.body]
-        
         if node.orelse:
             node.orelse = [self.run(s) for s in node.orelse]
-        
         return node
 
 --- src/runtime/regalloc.py ---
 from src.ir.ir import Instr
 from src.ir.operands import Reg
 from collections import namedtuple
-
 class LiveRange:
     def __init__(self, reg, start, end):
-        self.reg = reg       # virtual register
-        self.start = start   # first instruction index
-        self.end = end       # last instruction index
-        self.phys = None     # physical register assigned
+        self.reg = reg
+        self.start = start
+        self.end = end
+        self.phys = None
         self.slot = None
-
 def get_defs_uses(instr):
     if instr.op in ("LOAD_CONST", "LOAD_VAR"):
         return [instr.a], []
@@ -1355,34 +1182,27 @@ def get_defs_uses(instr):
         return [instr.a], []
     else:
         return [], []
-
 def compute_live_ranges(code):
     first = {}
     last = {}
-
     for i, instr in enumerate(code):
         defs, uses = get_defs_uses(instr)
         for r in defs + uses:
             if isinstance(r, Reg):
                 first.setdefault(r, i)
                 last[r] = i
-
     ranges = [LiveRange(r, first[r], last[r]) for r in first]
     ranges.sort(key=lambda x: x.start)
     return ranges
-
 def pick_spill(active, current):
     candidates = active + [current]
     return max(candidates, key=lambda r: r.end)
-
 def linear_scan_allocate(code, num_regs):
     ranges = compute_live_ranges(code)
     active = []
     free_regs = list(range(num_regs))
     new_code = []
-    
     next_slot = 0
-
     def expire_old(current_start):
         nonlocal active, free_regs
         still_active = []
@@ -1392,12 +1212,10 @@ def linear_scan_allocate(code, num_regs):
             else:
                 free_regs.append(r.phys)
         active[:] = still_active
-
     for r in ranges:
         expire_old(r.start)
         if not free_regs:
             victim = pick_spill(active, r)
-
             if victim is r:
                 r.slot = next_slot
                 next_slot += 1
@@ -1406,54 +1224,43 @@ def linear_scan_allocate(code, num_regs):
             else:
                 victim.slot = next_slot
                 next_slot += 1
-
                 free_regs.append(victim.phys)
                 active.remove(victim)
-        
         r.phys = free_regs.pop(0)
         active.append(r)
         active.sort(key=lambda x: x.end)
-    
     def rewrite_operand(op):
         if isinstance(op, Reg):
-            lr = range_map[op]      # lookup virtual Reg object
+            lr = range_map[op]
             if lr.phys is not None:
                 return Reg(lr.phys)
         return op
-    
     range_map = {r.reg: r for r in ranges}
     for instr in code:
-
         defs, uses = get_defs_uses(instr)
-
         for u in uses:
             if not isinstance(u, Reg):
                 continue
             lr = range_map[u]
             if lr.slot is not None:
                 new_code.append(Instr("SPILL_LOAD", lr.phys, lr.slot))
-
         new_instr = Instr(
             instr.op,
             rewrite_operand(instr.a),
             rewrite_operand(instr.b),
             rewrite_operand(instr.c)
         )
-        
         if hasattr(instr, 'arg_regs'):
             new_instr.arg_regs = [rewrite_operand(r) for r in instr.arg_regs]
         if hasattr(instr, 'param_names'):
             new_instr.param_names = instr.param_names
-
         new_code.append(new_instr)
-
         for d in defs:
             if not isinstance(d, Reg):
                 continue
             lr = range_map[d]
             if lr.slot is not None:
                 new_code.append(Instr("SPILL_STORE", lr.slot, lr.phys))
-
     return new_code
 
 --- src/runtime/vm.py ---
@@ -1464,365 +1271,266 @@ class VM:
         self.free_regs = list(range(self.num_regs))
         self.vars = {}
         self.stack = {}
-        self.call_stack = [] # (ip, locals)
-        self.code = None # to be set in /main.py
-        self.ip = 0 # instruction pointer
-    
-    def dump_regs(self): # simple dump debugger
+        self.call_stack = []
+        self.code = None
+        self.ip = 0
+    def dump_regs(self):
         print(f"used regs: {len([reg for reg in self.regs if reg is not None])}")
         print(f"used spills: {len(self.stack)}")
-        
-        for index, reg in enumerate(self.regs): # prints every used reg
+        for index, reg in enumerate(self.regs):
             if reg is not None:
                 print(f"reg {index} {reg}")
-        
-        for slot, value in self.stack.items(): # prints every spill var in stack
+        for slot, value in self.stack.items():
             print(f"spill {slot} {value}")
-    
-    def find_label(self, label_name): # for functions / gen calls
+    def find_label(self, label_name):
         for i, instr in enumerate(self.code):
             if instr.op == "LABEL" and instr.a == label_name:
                 return i
         raise RuntimeError(f"Label not found: {label_name}")
-    
     def run(self, code):
         self.ip = 0
-        
         while self.ip < len(code):
             instr = code[self.ip]
             op, a, b, c = instr.op, instr.a, instr.b, instr.c
-            
             if op == "LOAD_CONST":
                 self.regs[a.id] = b.value
-            
             elif op == "LOAD_VAR":
                 self.regs[a.id] = self.vars[b]
-            
             elif op == "STORE_VAR":
                 self.vars[a] = self.regs[b.id]
-            
             elif op == "PRINT":
                 print(self.regs[a.id])
-            
             elif op == "CALL":
                 self.call_stack.append((self.ip + 1, self.vars.copy(), b))
-                
                 target_ip = self.find_label(a)
                 self.ip = target_ip
                 self.vars = {}
-
                 label_instr = code[target_ip]
                 param_names = getattr(label_instr, "param_names", [])
                 arg_regs = getattr(instr, "arg_regs", [])
-
                 for name, reg in zip(param_names, arg_regs):
                     self.vars[name] = self.regs[reg.id]
-
                 continue
-
             elif op == "RETURN":
                 ret_value = None
                 if a is not None:
                     ret_value = self.regs[a.id]
-
                 if self.call_stack:
                     self.ip, caller_vars, dest_reg = self.call_stack.pop()
                     self.vars = caller_vars
-
                     if ret_value is not None and dest_reg is not None:
                         self.regs[dest_reg.id] = ret_value
-
                     continue
                 else:
                     break
-            
             elif op == "LABEL":
                 pass
-            
             elif op == "JUMP":
                 self.ip = a
                 continue
-            
             elif op == "JUMP_IF_TRUE":
                 if self.regs[a.id]:
                     self.ip = b
                     continue
-            
             elif op == "JUMP_IF_FALSE":
                 if not self.regs[a.id]:
                     self.ip = b
                     continue
-            
             elif op == "MOVE":
                 self.regs[a.id] = self.regs[b.id]
-            
             elif op == "SPILL_STORE":
                 self.stack[a] = self.regs[b]
-
             elif op == "SPILL_LOAD":
                 self.regs[a] = self.stack[b]
-            
             elif op == "ADD":
                 self.regs[a.id] = self.regs[b.id] + self.regs[c.id]
-
             elif op == "SUB":
                 self.regs[a.id] = self.regs[b.id] - self.regs[c.id]
-
             elif op == "MUL":
                 self.regs[a.id] = self.regs[b.id] * self.regs[c.id]
-
             elif op == "DIV":
                 self.regs[a.id] = self.regs[b.id] / self.regs[c.id]
-
             elif op == "POW":
                 self.regs[a.id] = self.regs[b.id] ** self.regs[c.id]
-
             elif op == "NEG":
                 self.regs[a.id] = -self.regs[b.id]
-
             elif op == "NOT":
                 self.regs[a.id] = not self.regs[b.id]
-
             elif op == "EQ":
                 self.regs[a.id] = self.regs[b.id] == self.regs[c.id]
-
             elif op == "NE":
                 self.regs[a.id] = self.regs[b.id] != self.regs[c.id]
-
             elif op == "LT":
                 self.regs[a.id] = self.regs[b.id] < self.regs[c.id]
-
             elif op == "GT":
                 self.regs[a.id] = self.regs[b.id] > self.regs[c.id]
-
             elif op == "LE":
                 self.regs[a.id] = self.regs[b.id] <= self.regs[c.id]
-
             elif op == "GE":
                 self.regs[a.id] = self.regs[b.id] >= self.regs[c.id]
-            
             elif op == "AND":
                 self.regs[a.id] = self.regs[b.id] and self.regs[c.id]
-
             else:
                 raise RuntimeError(f"Unknown opcode {op}")
-    
             self.ip += 1
 
 --- src/semantic/analyser.py ---
 from src.semantic.types import *
 from src.frontend.ast_nodes import *
 from src.semantic.symbol_table import *
-
-
-
 class Analyser():
     def __init__(self, symbols):
         self.symbols: SymbolTable = symbols
         self.current_function = None
-    
     def analyse(self, node):
         if isinstance(node, Module):
             for stmt in node.body:
                 self.analyse(stmt)
-        
         elif isinstance(node, Call):
             for arg in node.args:
                 self.analyse(arg)
-            
             return None
-        
         elif isinstance(node, Expr):
             self.analyse(node.value)
-        
         elif isinstance(node, Assign):
             value_type = self.analyse(node.value)
             self.symbols.define(node.target.id, value_type)
-        
         elif isinstance(node, Name):
             if not self.symbols.exists(node.id):
                 raise Exception(f"Undefined variable '{node.id}'")
-            
             return self.symbols.get(node.id)["type"]
-        
         elif isinstance(node, Constant):
             value = node.value
-            
             if isinstance(value, str):
                 node.inferred_type = STRING
                 return STRING
-            
             elif isinstance(value, bool):
                 node.inferred_type = BOOL
                 return BOOL
-            
             elif isinstance(value, (float, int)):
                 node.inferred_type = NUMBER
                 return NUMBER
-        
         elif isinstance(node, BinOp):
             left = self.analyse(node.left)
             right = self.analyse(node.right)
-
             if isinstance(left, UnknownType):
                 left = right
                 node.left.inferred_type = right
-
             if isinstance(right, UnknownType):
                 right = left
                 node.right.inferred_type = left
-
             if not left.supports_binary(node.op, right):
                 raise TypeError(f"Operator '{node.op}' not supported between {left} and {right}")
-
             node.inferred_type = left
             return left
-        
         elif isinstance(node, If):
             test_type = self.analyse(node.test)
             if test_type != BOOL:
                 raise TypeError("If condition must be boolean")
-
             for stmt in node.body:
                 self.analyse(stmt)
-
             if node.orelse:
                 for stmt in node.orelse:
                     self.analyse(stmt)
-        
         elif isinstance(node, Compare):
             left = self.analyse(node.left)
             right = self.analyse(node.comparators[0])
-
             if not left.is_compatible(right):
                 raise TypeError(f"Cannot compare {left} with {right}")
-
             node.inferred_type = BOOL
             return BOOL
-
         elif isinstance(node, FunctionDef):
             self.symbols.define(node.name, "function")
-            
             self.symbols.enter_scope()
             old_fn = self.current_function
             self.current_function = node
-
             for arg in node.args:
                 self.symbols.define(arg, UNKNOWN)
-
             for stmt in node.body:
                 self.analyse(stmt)
-
             self.current_function = old_fn
             self.symbols.exit_scope()
-        
         elif isinstance(node, Return):
             if self.current_function is None:
                 raise Exception("Return outside function")
-
             if node.value:
                 return_type = self.analyse(node.value)
             else:
-                return_type = NUMBER  # your default implicit return type
-
+                return_type = NUMBER
             return return_type
-        
         elif isinstance(node, While):
             test_type = self.analyse(node.test)
             if test_type != BOOL:
                 raise TypeError("While condition must be boolean")
             for stmt in node.body:
                 self.analyse(stmt)
-        
         elif isinstance(node, For):
             start_type = self.analyse(node.start)
             end_type = self.analyse(node.end)
-
             if start_type != NUMBER or end_type != NUMBER:
                 raise TypeError("For loop start and end must be numbers")
-
             self.symbols.define(node.target.id, NUMBER)
-
             for stmt in node.body:
                 self.analyse(stmt)
-        
         else:
             return None
 
 --- src/semantic/symbol_table.py ---
 class SymbolTable():
     def __init__(self):
-        self.scopes = [{}]  # stack of scopes
-    
+        self.scopes = [{}]
     def define(self, name, _type):
         self.scopes[-1][name] = {"type": _type}
-    
     def exists(self, name):
         return any(name in scope for scope in self.scopes)
-    
     def get(self, name):
         for scope in reversed(self.scopes):
             if name in scope:
                 return scope[name]
         return None
-    
     def enter_scope(self):
         self.scopes.append({})
-    
     def exit_scope(self):
         self.scopes.pop()
 
 --- src/semantic/types.py ---
 from dataclasses import dataclass
 from typing import Tuple, ClassVar
-
 @dataclass(frozen=True, slots=True)
 class Type:
     name: ClassVar[str]
-
     def is_compatible(self, other: "Type") -> bool:
         return self == other
-
     def supports_binary(self, op: str, other: "Type") -> bool:
         return False
-
 @dataclass(frozen=True)
 class NumberType(Type):
     name: ClassVar[str] = "number"
-
     def supports_binary(self, op: str, other: "Type") -> bool:
         if op in {"+", "-", "*", "/", "^"}:
             return isinstance(other, NumberType)
         return False
-
 @dataclass(frozen=True)
 class StringType(Type):
     name: ClassVar[str] = "string"
-
     def supports_binary(self, op: str, other: "Type") -> bool:
         if op == "+":
             return isinstance(other, StringType)
         return False
-
 @dataclass(frozen=True)
 class BoolType(Type):
     name: ClassVar[str] = "bool"
-
 @dataclass(frozen=True)
 class ListType(Type):
     name: ClassVar[str] = "list"
     element_type: Type
-
 @dataclass(frozen=True)
 class UnknownType(Type):
     name: str = "unknown"
-
     def is_compatible(self, other: "Type") -> bool:
         return True
-    
     def supports_binary(self, op: str, other: "Type") -> bool:
         return True
-
 NUMBER = NumberType()
 STRING = StringType()
 BOOL = BoolType()

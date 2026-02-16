@@ -1,11 +1,25 @@
 from src.frontend.ast_nodes import Constant, BinOp, UnOp, If
 
 class Pass:
+    def __init__(self):
+        self.visited = set()
+    
     def run(self, node):
+        if id(node) in self.visited:
+            return node
+        self.visited.add(id(node))
+        
         method = f"visit_{type(node).__name__}"
-        return getattr(self, method, self.generic)(node)
-
+        if hasattr(self, method):
+            return getattr(self, method, self.generic)(node)
+        else:
+            return self.generic(node)
+    
     def generic(self, node):
+        method = f"visit_{type(node).__name__}"
+        if hasattr(self, method):
+            return getattr(self, method)(node)
+        
         # safe guard against edge case #382
         if not hasattr(node, "__dict__"):
             return node

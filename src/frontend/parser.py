@@ -1,4 +1,5 @@
 from src.frontend.tokens import *
+from src.frontend.token_types import *
 from src.frontend.ast_nodes import *
 
 class Parser():
@@ -13,7 +14,7 @@ class Parser():
         if self.pos < len(self.tokens):
             self.current_token = self.tokens[self.pos]
         else:
-            self.current_token = Token("EOF")
+            self.current_token = Token(TokenType.EOF)
     
     def peek(self):
         if self.pos + 1 < len(self.tokens):
@@ -21,39 +22,39 @@ class Parser():
         return None
     
     def skip_newlines(self):
-        while self.current_token.type == "NEWLINE":
+        while self.current_token.type == TokenType.NEWLINE:
             self.advance()
     
     def parse(self):
         body = []
 
-        while self.current_token.type != "EOF":
+        while self.current_token.type != TokenType.EOF:
             self.skip_newlines()
-            if self.current_token.type == "EOF":
+            if self.current_token.type == TokenType.EOF:
                 break
             body.append(self.statement())
 
         return Module(body)
     
     def statement(self):
-        if self.current_token.type == "PRINT":
+        if self.current_token.type == TokenType.PRINT:
             return self.parse_print()
-        elif self.current_token.type == "IF":
+        elif self.current_token.type == TokenType.IF:
             return self.parse_if()
-        elif self.current_token.type == "NAME":
-            if self.peek() and self.peek().type == "LPAREN":
+        elif self.current_token.type == TokenType.NAME:
+            if self.peek() and self.peek().type == TokenType.LPAREN:
                 return self.parse_call()
-            elif self.peek() and self.peek().type == "EQ":
+            elif self.peek() and self.peek().type == TokenType.EQ:
                 return self.parse_assign()
             else:
                 return Expr(Name(self.current_token.value))
-        elif self.current_token.type == "FN":
+        elif self.current_token.type == TokenType.FN:
             return self.parse_function()
-        elif self.current_token.type == "WHILE":
+        elif self.current_token.type == TokenType.WHILE:
             return self.parse_while()
-        elif self.current_token.type == "FOR":
+        elif self.current_token.type == TokenType.FOR:
             return self.parse_for()
-        elif self.current_token.type == "RETURN":
+        elif self.current_token.type == TokenType.RETURN:
             return self.parse_return()
         else:
             return Expr(self.parse_expr())
@@ -61,13 +62,13 @@ class Parser():
     def parse_print(self):
         # CONSUME
         self.advance()
-        if self.current_token.type != "LPAREN":
+        if self.current_token.type != TokenType.LPAREN:
             raise Exception("Expected '(' after print")
         self.advance()
         
         expr_node = self.parse_expr()
         
-        if self.current_token.type != "RPAREN":
+        if self.current_token.type != TokenType.RPAREN:
             raise Exception("Expected ')' after print argument")
         self.advance()
         
@@ -80,15 +81,15 @@ class Parser():
         self.advance()  # skip 'if'
         test = self.parse_expr()
 
-        if self.current_token.type != "COLON":
+        if self.current_token.type != TokenType.COLON:
             raise Exception("Expected ':' after if condition")
         self.advance()
 
-        if self.current_token.type != "NEWLINE":
+        if self.current_token.type != TokenType.NEWLINE:
             raise Exception("Expected newline after ':'")
         self.advance()
 
-        if self.current_token.type != "INDENT":
+        if self.current_token.type != TokenType.INDENT:
             raise Exception("Expected indent")
         self.advance()
 
@@ -96,30 +97,30 @@ class Parser():
 
         while True:
             self.skip_newlines()
-            if self.current_token.type == "DEDENT":
+            if self.current_token.type == TokenType.DEDENT:
                 break
             body.append(self.statement())
 
-        if self.current_token.type == "DEDENT" and self.peek() and self.peek().type == "ELSE":
+        if self.current_token.type == TokenType.DEDENT and self.peek() and self.peek().type == TokenType.ELSE:
             self.advance()      # DEDENT
             self.advance()      # ELSE
 
-            if self.current_token.type != "COLON":
+            if self.current_token.type != TokenType.COLON:
                 raise Exception("Expected ':' after else")
             self.advance()
 
-            if self.current_token.type != "NEWLINE":
+            if self.current_token.type != TokenType.NEWLINE:
                 raise Exception("Expected newline after ':'")
             self.advance()
 
-            if self.current_token.type != "INDENT":
+            if self.current_token.type != TokenType.INDENT:
                 raise Exception("Expected indent in else block")
             self.advance()  # consume INDENT
 
             else_body = []
             while True:
                 self.skip_newlines()
-                if self.current_token.type == "DEDENT":
+                if self.current_token.type == TokenType.DEDENT:
                     break
                 else_body.append(self.statement())
             self.advance()  # consume DEDENT at end of else
@@ -132,7 +133,7 @@ class Parser():
         name_token = self.current_token
         self.advance()
         
-        if self.current_token.type != "EQ":
+        if self.current_token.type != TokenType.EQ:
             raise Exception("Expected '=' after variable name")
         self.advance()
         
@@ -148,21 +149,24 @@ class Parser():
         comparators = []
         ops = []
 
-        while self.current_token.type in ("EE","NE","LESS","GREATER","LE","GE"):
+        while self.current_token.type in (
+            TokenType.EE, TokenType.NE, TokenType.LESS,
+            TokenType.GREATER, TokenType.LE, TokenType.GE
+        ):
             ops.append(self.current_token.type)
             self.advance()
             comparators.append(self.parse_binop())
 
         if ops:
             # adjust AST if needed
-            return Compare(left, ops[0], comparators)
+            return Compare(left, ops[0].name, comparators)
 
         return left
     
     def parse_logic_or(self):
         left = self.parse_logic_and()
         
-        while self.current_token.type == "OR":
+        while self.current_token.type == TokenType.OR:
             self.advance()
             right = self.parse_logic_and()
             left = BinOp(left, "or", right)
@@ -172,7 +176,7 @@ class Parser():
     def parse_logic_and(self):
         left = self.parse_comparison()
         
-        while self.current_token.type == "AND":
+        while self.current_token.type == TokenType.AND:
             self.advance()
             right = self.parse_comparison()
             left = BinOp(left, "and", right)
@@ -190,7 +194,10 @@ class Parser():
         while True:
             op_token = self.current_token
             
-            if op_token.type in ("PLUS", "MINUS", "MUL", "DIV", "POW"):
+            if op_token.type in (
+                TokenType.PLUS, TokenType.MINUS, TokenType.MUL,
+                TokenType.DIV, TokenType.POW
+            ):
                 prec = self.get_precedence(op_token)
                 
                 if prec < min_prec:
@@ -211,10 +218,10 @@ class Parser():
     
     def parse_unary(self):
         tok = self.current_token
-        if tok.type in ("PLUS", "MINUS"):
+        if tok.type in (TokenType.PLUS, TokenType.MINUS):
             self.advance()
             return UnOp(op=self.token_to_op(tok), operand=self.parse_unary())
-        elif tok.type == "NOT":
+        elif tok.type == TokenType.NOT:
             self.advance()
             return UnOp(op="not", operand=self.parse_unary())
         else:
@@ -223,25 +230,25 @@ class Parser():
     def parse_primary(self):
         tok = self.current_token
         
-        if tok.type == "INT" or tok.type == "FLOAT":
+        if tok.type == TokenType.INT or tok.type == TokenType.FLOAT:
             self.advance()
             return Constant(tok.value)
         
-        elif tok.type == "NAME":
+        elif tok.type == TokenType.NAME:
             self.advance()
             node = Name(tok.value)
 
             # handle call syntax
-            if self.current_token.type == "LPAREN":
+            if self.current_token.type == TokenType.LPAREN:
                 self.advance()  # skip '('
                 args = []
 
-                if self.current_token.type != "RPAREN":
+                if self.current_token.type != TokenType.RPAREN:
                     while True:
                         args.append(self.parse_expr())
-                        if self.current_token.type == "COMMA":
+                        if self.current_token.type == TokenType.COMMA:
                             self.advance()
-                        elif self.current_token.type == "RPAREN":
+                        elif self.current_token.type == TokenType.RPAREN:
                             break
                         else:
                             raise Exception("Expected ',' or ')' in argument list")
@@ -250,28 +257,24 @@ class Parser():
                 return Call(node, args)
 
             return node
-        
-        elif tok.type == "NAME":
-            self.advance()
-            return Name(tok.value)
 
-        elif tok.type == "LPAREN":
+        elif tok.type == TokenType.LPAREN:
             self.advance()
-            if self.current_token.type == "RPAREN":
+            if self.current_token.type == TokenType.RPAREN:
                 expr = Constant(None)
             else:
                 expr = self.parse_expr()
             
-            if self.current_token.type != "RPAREN":
+            if self.current_token.type != TokenType.RPAREN:
                 raise Exception("Expected ')' after expression")
             self.advance()
             return expr
         
-        elif tok.type == "TRUE":
+        elif tok.type == TokenType.TRUE:
             self.advance()
             return Constant(True)
 
-        elif tok.type == "FALSE":
+        elif tok.type == TokenType.FALSE:
             self.advance()
             return Constant(False)
         
@@ -281,48 +284,48 @@ class Parser():
     def parse_function(self):
         self.advance() # skip fn
         
-        if self.current_token.type != "NAME":
+        if self.current_token.type != TokenType.NAME:
             raise Exception("Expected function name")
         func_name = self.current_token.value
         self.advance()
         
-        if self.current_token.type != "LPAREN":
+        if self.current_token.type != TokenType.LPAREN:
             raise Exception("Expected '(' after function name")
         self.advance()  # skip '('
 
         # parse argument names (can be empty)
         args = []
-        if self.current_token.type != "RPAREN":
+        if self.current_token.type != TokenType.RPAREN:
             while True:
-                if self.current_token.type != "NAME":
+                if self.current_token.type != TokenType.NAME:
                     raise Exception("Expected argument name")
                 args.append(self.current_token.value)
                 self.advance()
-                if self.current_token.type == "RPAREN":
+                if self.current_token.type == TokenType.RPAREN:
                     break
-                elif self.current_token.type == "COMMA":
+                elif self.current_token.type == TokenType.COMMA:
                     self.advance()
                 else:
                     raise Exception("Expected ',' or ')' in argument list")
 
         self.advance()  # skip )
         
-        if self.current_token.type != "COLON":
+        if self.current_token.type != TokenType.COLON:
             raise Exception("Expected ':' after function header")
         self.advance()
         
-        if self.current_token.type != "NEWLINE":
+        if self.current_token.type != TokenType.NEWLINE:
             raise Exception("Expected newline after ':'")
         self.advance()
         
-        if self.current_token.type != "INDENT":
+        if self.current_token.type != TokenType.INDENT:
             raise Exception("Expected indent in function body")
         self.advance()
         
         body = []
-        while self.current_token.type != "DEDENT":
+        while self.current_token.type != TokenType.DEDENT:
             self.skip_newlines()
-            if self.current_token.type == "DEDENT":
+            if self.current_token.type == TokenType.DEDENT:
                 break
             body.append(self.statement())
         
@@ -333,22 +336,22 @@ class Parser():
         self.advance()  # skip 'while'
         test = self.parse_expr()
 
-        if self.current_token.type != "COLON":
+        if self.current_token.type != TokenType.COLON:
             raise Exception("Expected ':' after while condition")
         self.advance()
 
-        if self.current_token.type != "NEWLINE":
+        if self.current_token.type != TokenType.NEWLINE:
             raise Exception("Expected newline after ':'")
         self.advance()
 
-        if self.current_token.type != "INDENT":
+        if self.current_token.type != TokenType.INDENT:
             raise Exception("Expected indent in while body")
         self.advance()
 
         body = []
-        while self.current_token.type != "DEDENT":
+        while self.current_token.type != TokenType.DEDENT:
             self.skip_newlines()
-            if self.current_token.type == "DEDENT":
+            if self.current_token.type == TokenType.DEDENT:
                 break
             body.append(self.statement())
 
@@ -359,17 +362,17 @@ class Parser():
         func_name = self.current_token.value
         self.advance()  # skip function name
 
-        if self.current_token.type != "LPAREN":
+        if self.current_token.type != TokenType.LPAREN:
             raise Exception("Expected '(' in function call")
         self.advance()  # skip '('
 
         args = []
-        if self.current_token.type != "RPAREN":
+        if self.current_token.type != TokenType.RPAREN:
             while True:
                 args.append(self.parse_expr())
-                if self.current_token.type == "COMMA":
+                if self.current_token.type == TokenType.COMMA:
                     self.advance()
-                elif self.current_token.type == "RPAREN":
+                elif self.current_token.type == TokenType.RPAREN:
                     break
                 else:
                     raise Exception("Expected ',' or ')' in argument list")
@@ -379,39 +382,39 @@ class Parser():
     def parse_for(self):
         self.advance()  # skip 'for'
 
-        if self.current_token.type != "NAME":
+        if self.current_token.type != TokenType.NAME:
             raise Exception("Expected loop variable name")
         loop_var = Name(self.current_token.value)
         self.advance()
 
-        if self.current_token.type != "IN":
+        if self.current_token.type != TokenType.IN:
             raise Exception("Expected 'in' in for loop")
         self.advance()
 
         start = self.parse_expr()
 
-        if self.current_token.type != "RANGE":
+        if self.current_token.type != TokenType.RANGE:
             raise Exception("Expected '..' in for loop")
         self.advance()
 
         end = self.parse_expr()
 
-        if self.current_token.type != "COLON":
+        if self.current_token.type != TokenType.COLON:
             raise Exception("Expected ':' after for header")
         self.advance()
 
-        if self.current_token.type != "NEWLINE":
+        if self.current_token.type != TokenType.NEWLINE:
             raise Exception("Expected newline after ':'")
         self.advance()
 
-        if self.current_token.type != "INDENT":
+        if self.current_token.type != TokenType.INDENT:
             raise Exception("Expected indent in for body")
         self.advance()
 
         body = []
-        while self.current_token.type != "DEDENT":
+        while self.current_token.type != TokenType.DEDENT:
             self.skip_newlines()
-            if self.current_token.type == "DEDENT":
+            if self.current_token.type == TokenType.DEDENT:
                 break
             body.append(self.statement())
 
@@ -422,7 +425,7 @@ class Parser():
         self.advance()  # consume 'return'
 
         # return with no value
-        if self.current_token.type in ("NEWLINE", "DEDENT"):
+        if self.current_token.type in (TokenType.NEWLINE, TokenType.DEDENT):
             return Return(None)
 
         value = self.parse_expr()
@@ -430,11 +433,11 @@ class Parser():
     
     def token_to_op(self, token):
         mapping = {
-            "PLUS": "+",
-            "MINUS": "-",
-            "MUL": "*",
-            "DIV": "/",
-            "POW": "^"
+            TokenType.PLUS: "+",
+            TokenType.MINUS: "-",
+            TokenType.MUL: "*",
+            TokenType.DIV: "/",
+            TokenType.POW: "^"
         }
         
         return mapping[token.type]
@@ -443,11 +446,11 @@ class Parser():
     # i will literally light my codebase on fire
     def get_precedence(self, token):
         prec = {
-            "PLUS": 1,
-            "MINUS": 1,
-            "MUL": 2,
-            "DIV": 2,
-            "POW": 3
+            TokenType.PLUS: 1,
+            TokenType.MINUS: 1,
+            TokenType.MUL: 2,
+            TokenType.DIV: 2,
+            TokenType.POW: 3
         }
         
         return prec[token.type]
