@@ -1,3 +1,5 @@
+from src.frontend.token_types  import *
+
 # past-josh: PLEASE FOR THE LOVE OF GOD REFACTOR TO REGISTER-BASED!!
 # future-josh: your wish is my command
 class VM:

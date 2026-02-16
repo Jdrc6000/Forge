@@ -1,6 +1,6 @@
-from src.frontend.tokens import *
 from src.frontend.token_types import *
 from src.frontend.ast_nodes import *
+from src.frontend.token import Token
 
 class Parser():
     def __init__(self, tokens):

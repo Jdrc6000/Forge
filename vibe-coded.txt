@@ -247,9 +247,9 @@ class Lexer():
         return tokens
 
 --- src/frontend/parser.py ---
-from src.frontend.tokens import *
 from src.frontend.token_types import *
 from src.frontend.ast_nodes import *
+from src.frontend.token import Token
 class Parser():
     def __init__(self, tokens):
         self.tokens = tokens
@@ -375,7 +375,7 @@ class Parser():
             self.advance()
             comparators.append(self.parse_binop())
         if ops:
-            return Compare(left, ops[0], comparators)
+            return Compare(left, ops[0].name, comparators)
         return left
     def parse_logic_or(self):
         left = self.parse_logic_and()
@@ -714,6 +714,21 @@ SINGLE_CHAR_TOKENS = {
     ":": TokenType.COLON,
     ".": TokenType.DOT,
 }
+COMPARISIONS = {
+    "EE": "EQ",
+    "NE": "NE",
+    "LESS": "LT",
+    "GREATER": "GT",
+    "LE": "LE",
+    "GE": "GE"
+}
+BINOPS = {
+    "+": "ADD",
+    "-": "SUB",
+    "*": "MUL",
+    "/": "DIV",
+    "^": "POW"
+}
 
 --- src/frontend/token_types.py ---
 from enum import Enum, auto
@@ -759,105 +774,9 @@ class TokenType(Enum):
     RETURN = auto()
     DOT = auto()
 
---- src/frontend/tokens.py ---
-tt_int = "INT"
-tt_float = "FLOAT"
-tt_string = "STRING"
-tt_name = "NAME"
-tt_plus = "PLUS"
-tt_minus = "MINUS"
-tt_mul = "MUL"
-tt_div = "DIV"
-tt_pow = "POW"
-tt_lparen = "LPAREN"
-tt_rparen = "RPAREN"
-tt_eq = "EQ"
-tt_bang = "BANG"
-tt_less = "LESS"
-tt_greater = "GREATER"
-tt_ne = "NE"
-tt_ee = "EE"
-tt_le = "LE"
-tt_ge = "GE"
-tt_comma = "COMMA"
-tt_colon = "COLON"
-tt_newline = "NEWLINE"
-tt_indent = "INDENT"
-tt_dedent = "DEDENT"
-tt_eof = "EOF"
-tt_if = "IF"
-tt_else = "ELSE"
-tt_print = "PRINT"
-tt_and = "AND"
-tt_or = "OR"
-tt_not = "NOT"
-tt_true = "TRUE"
-tt_false = "FALSE"
-tt_fn = "FN"
-tt_while = "WHILE"
-tt_for = "FOR"
-tt_dot = "."
-tt_in = "IN"
-tt_range = "RANGE"
-tt_return = "RETURN"
-keywords = {
-    "if": tt_if,
-    "else": tt_else,
-    "print": tt_print,
-    "and": tt_and,
-    "or": tt_or,
-    "not": tt_not,
-    "true": tt_true,
-    "false": tt_false,
-    "fn": tt_fn,
-    "while": tt_while,
-    "for": tt_for,
-    "in": tt_in,
-    "return": tt_return
-}
-single_char_tokens = {
-    "+": tt_plus,
-    "-": tt_minus,
-    "*": tt_mul,
-    "/": tt_div,
-    "^": tt_pow,
-    "(": tt_lparen,
-    ")": tt_rparen,
-    "=": tt_eq,
-    "!": tt_bang,
-    "<": tt_less,
-    ">": tt_greater,
-    ",": tt_comma,
-    ":": tt_colon,
-    ".": tt_dot
-}
-binops = {
-    "+": "ADD",
-    "-": "SUB",
-    "*": "MUL",
-    "/": "DIV",
-    "^": "POW"
-}
-cmp = {
-    "EE": "EQ",
-    "NE": "NE",
-    "LESS": "LT",
-    "GREATER": "GT",
-    "LE": "LE",
-    "GE": "GE"
-}
-class Token():
-    def __init__(self, _type, value=None):
-        self.type = _type
-        self.value = value
-    def __repr__(self):
-        if self.value is not None:
-            return f"{self.type}:{self.value}"
-        return self.type
-
 --- src/ir/generator.py ---
 from src.frontend.ast_nodes import *
-from src.frontend.tokens import *
+from src.frontend.token_maps import *
 from src.ir.ir import IR, Instr
 from src.ir.operands import Imm
 class IRGenerator:
@@ -925,7 +844,7 @@ class IRGenerator:
         for comp in node.comparators:
             right = self.generate(comp)
             dest = self.ir.new_reg()
-            opcode = cmp.get(node.op)
+            opcode = COMPARISIONS.get(node.op)
             if not opcode:
                 raise RuntimeError(f"Unsupported comparison {node.op}")
             self.ir.emit(opcode, dest, left, right)
@@ -943,7 +862,7 @@ class IRGenerator:
         left = self.generate(node.left)
         right = self.generate(node.right)
         dest = left
-        self.ir.emit(binops[node.op], dest, left, right)
+        self.ir.emit(BINOPS[node.op], dest, left, right)
         return dest
     def gen_logic(self, node):
         left = self.generate(node.left)
@@ -1076,7 +995,12 @@ class Optimiser:
 --- src/optimiser/passes.py ---
 from src.frontend.ast_nodes import Constant, BinOp, UnOp, If
 class Pass:
+    def __init__(self):
+        self.visited = set()
     def run(self, node):
+        if id(node) in self.visited:
+            return node
+        self.visited.add(id(node))
         method = f"visit_{type(node).__name__}"
         if hasattr(self, method):
             return getattr(self, method, self.generic)(node)
@@ -1264,6 +1188,7 @@ def linear_scan_allocate(code, num_regs):
     return new_code
 
 --- src/runtime/vm.py ---
+from src.frontend.token_types  import *
 class VM:
     def __init__(self, num_regs):
         self.num_regs = num_regs

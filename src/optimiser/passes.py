@@ -16,6 +16,7 @@ class Pass:
             return self.generic(node)
     
     def generic(self, node):
+        # safe guard against edge case #4282
         method = f"visit_{type(node).__name__}"
         if hasattr(self, method):
             return getattr(self, method)(node)

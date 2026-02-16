@@ -32,3 +32,20 @@ SINGLE_CHAR_TOKENS = {
     ":": TokenType.COLON,
     ".": TokenType.DOT,
 }
+
+COMPARISIONS = {
+    "EE": "EQ",
+    "NE": "NE",
+    "LESS": "LT",
+    "GREATER": "GT",
+    "LE": "LE",
+    "GE": "GE"
+}
+
+BINOPS = {
+    "+": "ADD",
+    "-": "SUB",
+    "*": "MUL",
+    "/": "DIV",
+    "^": "POW"
+}

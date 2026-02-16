@@ -1,5 +1,5 @@
 from src.frontend.ast_nodes import *
-from src.frontend.tokens import *
+from src.frontend.token_maps import *
 from src.ir.ir import IR, Instr
 from src.ir.operands import Imm
 
@@ -101,7 +101,7 @@ class IRGenerator:
             dest = self.ir.new_reg()
             
             # safeguards against idiots using wrongs ops (me)
-            opcode = cmp.get(node.op)
+            opcode = COMPARISIONS.get(node.op)
             if not opcode:
                 raise RuntimeError(f"Unsupported comparison {node.op}")
             self.ir.emit(opcode, dest, left, right)
@@ -130,7 +130,7 @@ class IRGenerator:
 
         # reuse left register as destination
         dest = left
-        self.ir.emit(binops[node.op], dest, left, right)
+        self.ir.emit(BINOPS[node.op], dest, left, right)
         return dest
     
     def gen_logic(self, node):

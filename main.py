@@ -17,7 +17,7 @@ fn check(a, b):
     else:
         return false
 
-print(check(5, 1))
+print(check(5, 5))
 """
 
 start = time()
