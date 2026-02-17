@@ -168,7 +168,7 @@ class IRGenerator:
         instr.param_names = node.args
         self.ir.code.append(instr)
         
-        for stmt in node.body:
+        for stmt in node.body.statements:
             self.generate(stmt)
         
         default_reg = self.ir.new_reg()

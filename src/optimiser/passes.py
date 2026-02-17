@@ -101,7 +101,7 @@ class DeadCodeEliminator(Pass):
         
         if isinstance(node.test, Constant):
             if node.test.value:
-                return [self.run(stmt) for stmt in node.body]
+                return [self.run(stmt) for stmt in node.body.statements]
             else:
                 return [self.run(stmt) for stmt in (node.orelse or [])]
         

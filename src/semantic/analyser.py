@@ -105,7 +105,7 @@ class Analyser():
             for arg in node.args:
                 self.symbols.define(arg, UNKNOWN)
 
-            for stmt in node.body:
+            for stmt in node.body.statements:
                 self.analyse(stmt)
 
             self.current_function = old_fn

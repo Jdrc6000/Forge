@@ -9,14 +9,16 @@ from src.runtime.regalloc import linear_scan_allocate
 from src.runtime.vm import VM
 from src.ir.operands import Reg, Imm
 code = """
-fn check(a, b) {
-    if a == b {
-        return true
+fn check(num) {
+    if num == 1 {
+        return "num is 1"
+    } else if num == 2 {
+        return "num is 2"
     } else {
-        return false
+        return "num is not 1 or 2"
     }
 }
-print(check(5, 5))
+print(check(2))
 """
 start = time()
 lexer = Lexer(code)
@@ -54,7 +56,7 @@ print(f"took {time() - start} secs")
 
 --- src/frontend/ast_nodes.py ---
 from dataclasses import dataclass
-from typing import List, Optional, Any
+from typing import List, Optional, Any, Union
 class AST():
     inferred_type = None
 @dataclass
@@ -89,8 +91,8 @@ class UnOp(AST):
 @dataclass
 class If(AST):
     test: AST
-    body: List[AST]
-    orelse: Optional[List[AST]] = None
+    body: Block
+    orelse: Optional[Union[Block, "If"]] = None
 @dataclass
 class Compare(AST):
     left: AST
@@ -114,6 +116,9 @@ class For(AST):
     start: AST
     end: AST
     body: list[AST]
+@dataclass
+class Block(AST):
+    statements: List[AST]
 
 --- src/frontend/lexer.py ---
 from src.frontend.token_maps import *
@@ -251,7 +256,6 @@ class Parser():
     def parse(self):
         body = []
         while self.current_token.type != TokenType.EOF:
-            self.skip_newlines()
             if self.current_token.type == TokenType.EOF:
                 break
             body.append(self.statement())
@@ -259,6 +263,8 @@ class Parser():
     def statement(self):
         if self.current_token.type == TokenType.PRINT:
             return self.parse_print()
+        elif self.current_token.type == TokenType.LBRACE:
+            return Block(self.parse_block())
         elif self.current_token.type == TokenType.IF:
             return self.parse_if()
         elif self.current_token.type == TokenType.NAME:
@@ -278,6 +284,50 @@ class Parser():
             return self.parse_return()
         else:
             return Expr(self.parse_expr())
+    def parse_primary(self):
+        tok = self.current_token
+        if tok.type in (TokenType.INT, TokenType.FLOAT):
+            self.advance()
+            return Constant(tok.value)
+        elif tok.type == TokenType.STRING:
+            self.advance()
+            return Constant(tok.value)
+        elif tok.type == TokenType.NAME:
+            self.advance()
+            node = Name(tok.value)
+            if self.current_token.type == TokenType.LPAREN:
+                self.advance()
+                args = []
+                if self.current_token.type != TokenType.RPAREN:
+                    while True:
+                        args.append(self.parse_expr())
+                        if self.current_token.type == TokenType.COMMA:
+                            self.advance()
+                        elif self.current_token.type == TokenType.RPAREN:
+                            break
+                        else:
+                            raise Exception("Expected ',' or ')' in argument list")
+                self.advance()
+                return Call(node, args)
+            return node
+        elif tok.type == TokenType.LPAREN:
+            self.advance()
+            if self.current_token.type == TokenType.RPAREN:
+                expr = Constant(None)
+            else:
+                expr = self.parse_expr()
+            if self.current_token.type != TokenType.RPAREN:
+                raise Exception("Expected ')' after expression")
+            self.advance()
+            return expr
+        elif tok.type == TokenType.TRUE:
+            self.advance()
+            return Constant(True)
+        elif tok.type == TokenType.FALSE:
+            self.advance()
+            return Constant(False)
+        else:
+            raise Exception(f"Unexpected token: {tok}")
     def parse_print(self):
         self.advance()
         if self.current_token.type != TokenType.LPAREN:
@@ -291,35 +341,6 @@ class Parser():
             func=Name("print"),
             args=[expr_node]
         )
-    def parse_if(self):
-        self.advance()
-        test = self.parse_expr()
-        if self.current_token.type != TokenType.LBRACE:
-            raise Exception("Expected '{' after if condition")
-        self.advance()
-        body = []
-        while True:
-            if self.current_token.type in (TokenType.RBRACE, TokenType.EOF):
-                break
-            body.append(self.statement())
-        if self.current_token.type != TokenType.RBRACE:
-            raise Exception("Expected '}' to close if block")
-        self.advance()
-        orelse = None
-        if self.current_token.type == TokenType.ELSE:
-            self.advance()
-            if self.current_token.type != TokenType.LBRACE:
-                raise Exception("Expected '{' after else")
-            self.advance()
-            orelse = []
-            while True:
-                if self.current_token.type in (TokenType.RBRACE, TokenType.EOF):
-                    break
-                orelse.append(self.statement())
-            if self.current_token.type != TokenType.RBRACE:
-                raise Exception("Expected '}' to close else block")
-            self.advance()
-        return If(test, body, orelse)
     def parse_assign(self):
         name_token = self.current_token
         self.advance()
@@ -400,47 +421,6 @@ class Parser():
             return UnOp(op="not", operand=self.parse_unary())
         else:
             return self.parse_primary()
-    def parse_primary(self):
-        tok = self.current_token
-        if tok.type == TokenType.INT or tok.type == TokenType.FLOAT:
-            self.advance()
-            return Constant(tok.value)
-        elif tok.type == TokenType.NAME:
-            self.advance()
-            node = Name(tok.value)
-            if self.current_token.type == TokenType.LPAREN:
-                self.advance()
-                args = []
-                if self.current_token.type != TokenType.RPAREN:
-                    while True:
-                        args.append(self.parse_expr())
-                        if self.current_token.type == TokenType.COMMA:
-                            self.advance()
-                        elif self.current_token.type == TokenType.RPAREN:
-                            break
-                        else:
-                            raise Exception("Expected ',' or ')' in argument list")
-                self.advance()
-                return Call(node, args)
-            return node
-        elif tok.type == TokenType.LPAREN:
-            self.advance()
-            if self.current_token.type == TokenType.RPAREN:
-                expr = Constant(None)
-            else:
-                expr = self.parse_expr()
-            if self.current_token.type != TokenType.RPAREN:
-                raise Exception("Expected ')' after expression")
-            self.advance()
-            return expr
-        elif tok.type == TokenType.TRUE:
-            self.advance()
-            return Constant(True)
-        elif tok.type == TokenType.FALSE:
-            self.advance()
-            return Constant(False)
-        else:
-            raise Exception(f"Unexpected token: {tok}")
     def parse_function(self):
         self.advance()
         if self.current_token.type != TokenType.NAME:
@@ -464,34 +444,26 @@ class Parser():
                 else:
                     raise Exception("Expected ',' or ')'")
         self.advance()
-        if self.current_token.type != TokenType.LBRACE:
-            raise Exception("Expected '{' after parameter list")
-        self.advance()
-        body = []
-        while self.current_token.type != TokenType.RBRACE and self.current_token.type != TokenType.EOF:
-            self.skip_newlines()
-            if self.current_token.type in (TokenType.RBRACE, TokenType.EOF):
-                break
-            stmt = self.statement()
-            body.append(stmt)
-        if self.current_token.type != TokenType.RBRACE:
-            raise Exception("Missing '}' at end of function")
-        self.advance()
+        body = self.parse_block()
         return FunctionDef(func_name, args, body)
+    def parse_if(self):
+        self.advance()
+        test = self.parse_expr()
+        body = self.parse_block().statements
+        orelse = None
+        if self.current_token.type == TokenType.ELSE:
+            self.advance()
+            if self.current_token.type == TokenType.IF:
+                orelse = [self.parse_if()]
+            else:
+                if self.current_token.type != TokenType.LBRACE:
+                    raise Exception("Expected '{' or 'if' after 'else'")
+                orelse = self.parse_block().statements
+        return If(test, body, orelse)
     def parse_while(self):
         self.advance()
         test = self.parse_expr()
-        if self.current_token.type != TokenType.LBRACE:
-            raise Exception("Expected '{' after header")
-        self.advance()
-        body = []
-        while True:
-            if self.current_token.type in (TokenType.RBRACE, TokenType.EOF):
-                break
-            body.append(self.statement())
-        if self.current_token.type != TokenType.RBRACE:
-            raise Exception("Missing '}'")
-        self.advance()
+        body = self.parse_block()
         return While(test, body)
     def parse_call(self):
         func_name = self.current_token.value
@@ -525,21 +497,25 @@ class Parser():
             raise Exception("Expected '..' in for loop")
         self.advance()
         end = self.parse_expr()
-        if self.current_token.type != TokenType.LBRACE:
-            raise Exception("Expected '{' after for header")
-        self.advance()
-        body = []
-        while self.current_token.type != TokenType.RBRACE and self.current_token.type != TokenType.EOF:
-            self.skip_newlines()
-            body.append(self.statement())
-        if self.current_token.type != TokenType.RBRACE:
-            raise Exception("Missing '}'")
-        self.advance()
+        body = self.parse_block()
         return For(loop_var, start, end, body)
     def parse_return(self):
         self.advance()
         value = self.parse_expr()
         return Return(value)
+    def parse_block(self):
+        if self.current_token.type != TokenType.LBRACE:
+            raise Exception("Expected '{' to start block")
+        self.advance()
+        body = []
+        while self.current_token.type not in (TokenType.RBRACE, TokenType.EOF):
+            stmt = self.statement()
+            if stmt is not None:
+                body.append(stmt)
+        if self.current_token.type != TokenType.RBRACE:
+            raise Exception("Expected '}' to close block")
+        self.advance()
+        return Block(body)
     def token_to_op(self, token):
         mapping = {
             TokenType.PLUS: "+",
@@ -591,12 +567,15 @@ class Parser():
             print(f"{pad}If")
             self.dump(node.test, indent + 1)
             print(f"{pad}  Body:")
-            for line in node.body:
-                self.dump(line, indent + 2)
+            for stmt in node.body:
+                self.dump(stmt, indent + 2)
             if node.orelse:
                 print(f"{pad}  Else:")
-                for line in node.orelse:
-                    self.dump(line, indent + 2)
+                if isinstance(node.orelse, If):
+                    self.dump(node.orelse, If)
+                else:
+                    for stmt in node.orelse:
+                        self.dump(stmt, indent + 2)
         elif isinstance(node, Compare):
             print(f"{pad}Compare( {' '.join(node.ops)} )")
             self.dump(node.left, indent + 1)
@@ -606,23 +585,27 @@ class Parser():
             print(f"{pad}FunctionDef({node.name})")
             print(f"{pad}  Args:")
             for arg in node.args:
-                self.dump(arg, indent + 2)
+                print(f"")
             print(f"{pad}  Body:")
-            for stmt in node.body:
+            for stmt in node.body.statements:
                 self.dump(stmt, indent + 2)
         elif isinstance(node, While):
             print(f"{pad}While")
             self.dump(node.test, indent + 1)
             print(f"{pad}  Body:")
-            for stmt in node.body:
+            for stmt in node.body.statements:
                 self.dump(stmt, indent + 2)
         elif isinstance(node, For):
             print(f"{pad}For({node.target.id})")
             self.dump(node.start, indent + 1)
             self.dump(node.end, indent + 1)
             print(f"{pad}  Body:")
-            for stmt in node.body:
+            for stmt in node.body.statements:
                 self.dump(stmt, indent + 2)
+        elif isinstance(node, Block):
+            print(f"{pad}Block")
+            for stmt in node.statements:
+                self.dump(stmt, indent + 1)
         else:
             print(f"{pad}{node}")
 
@@ -858,7 +841,7 @@ class IRGenerator:
         instr = Instr("LABEL", node.name)
         instr.param_names = node.args
         self.ir.code.append(instr)
-        for stmt in node.body:
+        for stmt in node.body.statements:
             self.generate(stmt)
         default_reg = self.ir.new_reg()
         self.ir.emit("LOAD_CONST", default_reg, Imm(0))
@@ -1034,13 +1017,23 @@ class DeadCodeEliminator(Pass):
         node.test = self.run(node.test)
         if isinstance(node.test, Constant):
             if node.test.value:
-                return [self.run(stmt) for stmt in node.body]
+                return [self.run(stmt) for stmt in node.body.statements]
             else:
                 return [self.run(stmt) for stmt in (node.orelse or [])]
         node.body = [self.run(s) for s in node.body]
         if node.orelse:
             node.orelse = [self.run(s) for s in node.orelse]
         return node
+
+--- src/runtime/builtins.py ---
+class Builtins:
+    @staticmethod
+    def print(vm, args_regs):
+        values = [vm.regs[r.id] for r in args_regs]
+        print(*values, sep=" ", end="\n")
+BUILTIN_FUNCTIONS = {
+    "print": Builtins.print
+}
 
 --- src/runtime/regalloc.py ---
 from src.ir.ir import Instr
@@ -1350,7 +1343,7 @@ class Analyser():
             self.current_function = node
             for arg in node.args:
                 self.symbols.define(arg, UNKNOWN)
-            for stmt in node.body:
+            for stmt in node.body.statements:
                 self.analyse(stmt)
             self.current_function = old_fn
             self.symbols.exit_scope()

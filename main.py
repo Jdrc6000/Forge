@@ -11,19 +11,17 @@ from src.runtime.vm import VM
 from src.ir.operands import Reg, Imm
 
 code = """
-fn check(a, b) {
-    if a == b {
-        return true
+fn check(num) {
+    if num == 1 {
+        return "num is 1"
+    } else if num == 2 {
+        return "num is 2"
     } else {
-        return false
+        return "num is not 1 or 2"
     }
 }
 
-i = 0
-while i < 10 {
-    print(check(i, 5))
-    i = i + 1
-}
+print(check(2))
 """
 
 start = time()

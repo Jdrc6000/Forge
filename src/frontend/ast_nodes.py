@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import List, Optional, Any
+from typing import List, Optional, Any, Union
 
 class AST():
     inferred_type = None
@@ -44,8 +44,8 @@ class UnOp(AST):
 @dataclass
 class If(AST):
     test: AST
-    body: List[AST]
-    orelse: Optional[List[AST]] = None
+    body: Block
+    orelse: Optional[Union[Block, "If"]] = None
 
 @dataclass
 class Compare(AST):
@@ -74,3 +74,7 @@ class For(AST):
     start: AST
     end: AST
     body: list[AST]
+
+@dataclass
+class Block(AST):
+    statements: List[AST]
