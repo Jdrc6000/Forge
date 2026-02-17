@@ -7,7 +7,6 @@ class Lexer():
         self.text = text
         self.pos = 0
         self.current_char = self.text[self.pos] if self.text else None
-        self.indents = [0]
     
     def advance(self):
         self.pos += 1
@@ -25,23 +24,6 @@ class Lexer():
         if self.pos + 1 < len(self.text):
             return self.text[self.pos + 1]
         return None
-    
-    def handle_indentation(self, tokens):
-        count = 0
-        while self.current_char == " ":
-            count += 1
-            self.advance()
-
-        if self.current_char == "\n":
-            return
-
-        if count > self.indents[-1]:
-            self.indents.append(count)
-            tokens.append(Token(TokenType.INDENT))
-        else:
-            while count < self.indents[-1]:
-                self.indents.pop()
-                tokens.append(Token(TokenType.DEDENT))
     
     # had to crack this like the alan turing cracked cyphertext
     def number(self):
@@ -110,8 +92,7 @@ class Lexer():
         while self.current_char is not None:
             if self.current_char == "\n":
                 self.advance()
-                tokens.append(Token(TokenType.NEWLINE))
-                self.handle_indentation(tokens)
+                continue
             
             elif self.current_char.isspace():
                 self.skip_whitespace()
@@ -160,10 +141,6 @@ class Lexer():
             
             else:
                 raise Exception(f"Illegal character: {self.current_char}")
-        
-        while len(self.indents) > 1:
-            self.indents.pop()
-            tokens.append(Token(TokenType.DEDENT))
         
         tokens.append(Token(TokenType.EOF))
         return tokens

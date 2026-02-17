@@ -9,14 +9,14 @@ from src.runtime.regalloc import linear_scan_allocate
 from src.runtime.vm import VM
 from src.ir.operands import Reg, Imm
 code = """
-fn check(a, b):
-    if a == b:
+fn check(a, b) {
+    if a == b {
         return true
-    else:
+    } else {
         return false
+    }
+}
 print(check(5, 5))
-print(check(5, 7))
-print(0 < 99 < 10)
 """
 start = time()
 lexer = Lexer(code)
@@ -124,7 +124,6 @@ class Lexer():
         self.text = text
         self.pos = 0
         self.current_char = self.text[self.pos] if self.text else None
-        self.indents = [0]
     def advance(self):
         self.pos += 1
         if self.pos < len(self.text):
@@ -138,20 +137,6 @@ class Lexer():
         if self.pos + 1 < len(self.text):
             return self.text[self.pos + 1]
         return None
-    def handle_indentation(self, tokens):
-        count = 0
-        while self.current_char == " ":
-            count += 1
-            self.advance()
-        if self.current_char == "\n":
-            return
-        if count > self.indents[-1]:
-            self.indents.append(count)
-            tokens.append(Token(TokenType.INDENT))
-        else:
-            while count < self.indents[-1]:
-                self.indents.pop()
-                tokens.append(Token(TokenType.DEDENT))
     def number(self):
         num_str = ""
         dot_count = 0
@@ -200,8 +185,7 @@ class Lexer():
         while self.current_char is not None:
             if self.current_char == "\n":
                 self.advance()
-                tokens.append(Token(TokenType.NEWLINE))
-                self.handle_indentation(tokens)
+                continue
             elif self.current_char.isspace():
                 self.skip_whitespace()
             elif self.current_char == "!" and self.peek() == "=":
@@ -242,9 +226,6 @@ class Lexer():
                 tokens.append(self.string())
             else:
                 raise Exception(f"Illegal character: {self.current_char}")
-        while len(self.indents) > 1:
-            self.indents.pop()
-            tokens.append(Token(TokenType.DEDENT))
         tokens.append(Token(TokenType.EOF))
         return tokens
 
@@ -267,9 +248,6 @@ class Parser():
         if self.pos + 1 < len(self.tokens):
             return self.tokens[self.pos + 1]
         return None
-    def skip_newlines(self):
-        while self.current_token.type == TokenType.NEWLINE:
-            self.advance()
     def parse(self):
         body = []
         while self.current_token.type != TokenType.EOF:
@@ -316,44 +294,32 @@ class Parser():
     def parse_if(self):
         self.advance()
         test = self.parse_expr()
-        if self.current_token.type != TokenType.COLON:
-            raise Exception("Expected ':' after if condition")
-        self.advance()
-        if self.current_token.type != TokenType.NEWLINE:
-            raise Exception("Expected newline after ':'")
-        self.advance()
-        if self.current_token.type != TokenType.INDENT:
-            raise Exception("Expected indent")
+        if self.current_token.type != TokenType.LBRACE:
+            raise Exception("Expected '{' after if condition")
         self.advance()
         body = []
         while True:
-            self.skip_newlines()
-            if self.current_token.type == TokenType.DEDENT:
+            if self.current_token.type in (TokenType.RBRACE, TokenType.EOF):
                 break
             body.append(self.statement())
-        if self.current_token.type == TokenType.DEDENT and self.peek() and self.peek().type == TokenType.ELSE:
+        if self.current_token.type != TokenType.RBRACE:
+            raise Exception("Expected '}' to close if block")
+        self.advance()
+        orelse = None
+        if self.current_token.type == TokenType.ELSE:
             self.advance()
+            if self.current_token.type != TokenType.LBRACE:
+                raise Exception("Expected '{' after else")
             self.advance()
-            if self.current_token.type != TokenType.COLON:
-                raise Exception("Expected ':' after else")
-            self.advance()
-            if self.current_token.type != TokenType.NEWLINE:
-                raise Exception("Expected newline after ':'")
-            self.advance()
-            if self.current_token.type != TokenType.INDENT:
-                raise Exception("Expected indent in else block")
-            self.advance()
-            else_body = []
+            orelse = []
             while True:
-                self.skip_newlines()
-                if self.current_token.type == TokenType.DEDENT:
+                if self.current_token.type in (TokenType.RBRACE, TokenType.EOF):
                     break
-                else_body.append(self.statement())
+                orelse.append(self.statement())
+            if self.current_token.type != TokenType.RBRACE:
+                raise Exception("Expected '}' to close else block")
             self.advance()
-            return If(test, body, else_body)
-        else:
-            self.advance()
-            return If(test, body)
+        return If(test, body, orelse)
     def parse_assign(self):
         name_token = self.current_token
         self.advance()
@@ -496,43 +462,35 @@ class Parser():
                 elif self.current_token.type == TokenType.COMMA:
                     self.advance()
                 else:
-                    raise Exception("Expected ',' or ')' in argument list")
+                    raise Exception("Expected ',' or ')'")
         self.advance()
-        if self.current_token.type != TokenType.COLON:
-            raise Exception("Expected ':' after function header")
-        self.advance()
-        if self.current_token.type != TokenType.NEWLINE:
-            raise Exception("Expected newline after ':'")
-        self.advance()
-        if self.current_token.type != TokenType.INDENT:
-            raise Exception("Expected indent in function body")
+        if self.current_token.type != TokenType.LBRACE:
+            raise Exception("Expected '{' after parameter list")
         self.advance()
         body = []
-        while self.current_token.type != TokenType.DEDENT:
+        while self.current_token.type != TokenType.RBRACE and self.current_token.type != TokenType.EOF:
             self.skip_newlines()
-            if self.current_token.type == TokenType.DEDENT:
+            if self.current_token.type in (TokenType.RBRACE, TokenType.EOF):
                 break
-            body.append(self.statement())
+            stmt = self.statement()
+            body.append(stmt)
+        if self.current_token.type != TokenType.RBRACE:
+            raise Exception("Missing '}' at end of function")
         self.advance()
         return FunctionDef(func_name, args, body)
     def parse_while(self):
         self.advance()
         test = self.parse_expr()
-        if self.current_token.type != TokenType.COLON:
-            raise Exception("Expected ':' after while condition")
-        self.advance()
-        if self.current_token.type != TokenType.NEWLINE:
-            raise Exception("Expected newline after ':'")
-        self.advance()
-        if self.current_token.type != TokenType.INDENT:
-            raise Exception("Expected indent in while body")
+        if self.current_token.type != TokenType.LBRACE:
+            raise Exception("Expected '{' after header")
         self.advance()
         body = []
-        while self.current_token.type != TokenType.DEDENT:
-            self.skip_newlines()
-            if self.current_token.type == TokenType.DEDENT:
+        while True:
+            if self.current_token.type in (TokenType.RBRACE, TokenType.EOF):
                 break
             body.append(self.statement())
+        if self.current_token.type != TokenType.RBRACE:
+            raise Exception("Missing '}'")
         self.advance()
         return While(test, body)
     def parse_call(self):
@@ -567,27 +525,19 @@ class Parser():
             raise Exception("Expected '..' in for loop")
         self.advance()
         end = self.parse_expr()
-        if self.current_token.type != TokenType.COLON:
-            raise Exception("Expected ':' after for header")
-        self.advance()
-        if self.current_token.type != TokenType.NEWLINE:
-            raise Exception("Expected newline after ':'")
-        self.advance()
-        if self.current_token.type != TokenType.INDENT:
-            raise Exception("Expected indent in for body")
+        if self.current_token.type != TokenType.LBRACE:
+            raise Exception("Expected '{' after for header")
         self.advance()
         body = []
-        while self.current_token.type != TokenType.DEDENT:
+        while self.current_token.type != TokenType.RBRACE and self.current_token.type != TokenType.EOF:
             self.skip_newlines()
-            if self.current_token.type == TokenType.DEDENT:
-                break
             body.append(self.statement())
+        if self.current_token.type != TokenType.RBRACE:
+            raise Exception("Missing '}'")
         self.advance()
         return For(loop_var, start, end, body)
     def parse_return(self):
         self.advance()
-        if self.current_token.type in (TokenType.NEWLINE, TokenType.DEDENT):
-            return Return(None)
         value = self.parse_expr()
         return Return(value)
     def token_to_op(self, token):
@@ -714,8 +664,6 @@ SINGLE_CHAR_TOKENS = {
     "*": TokenType.MUL,
     "/": TokenType.DIV,
     "^": TokenType.POW,
-    "(": TokenType.LPAREN,
-    ")": TokenType.RPAREN,
     "=": TokenType.EQ,
     "!": TokenType.BANG,
     "<": TokenType.LESS,
@@ -723,6 +671,10 @@ SINGLE_CHAR_TOKENS = {
     ",": TokenType.COMMA,
     ":": TokenType.COLON,
     ".": TokenType.DOT,
+    "(": TokenType.LPAREN,
+    ")": TokenType.RPAREN,
+    "{": TokenType.LBRACE,
+    "}": TokenType.RBRACE
 }
 COMPARISIONS = {
     "EE": "EQ",
@@ -760,8 +712,6 @@ class TokenType(Enum):
     MUL = auto()
     DIV = auto()
     POW = auto()
-    LPAREN = auto()
-    RPAREN = auto()
     EQ = auto()
     BANG = auto()
     LESS = auto()
@@ -772,9 +722,6 @@ class TokenType(Enum):
     GE = auto()
     COMMA = auto()
     COLON = auto()
-    NEWLINE = auto()
-    INDENT = auto()
-    DEDENT = auto()
     EOF = auto()
     IF = auto()
     ELSE = auto()
@@ -791,6 +738,10 @@ class TokenType(Enum):
     RANGE = auto()
     RETURN = auto()
     DOT = auto()
+    LPAREN = auto()
+    RPAREN = auto()
+    LBRACE = auto()
+    RBRACE = auto()
 
 --- src/ir/generator.py ---
 from src.frontend.ast_nodes import *
@@ -1105,21 +1056,34 @@ class LiveRange:
 def get_defs_uses(instr):
     if instr.op in ("LOAD_CONST", "LOAD_VAR"):
         return [instr.a], []
-    elif instr.op in ("ADD","SUB","MUL","DIV","POW"):
-        return [instr.a], [instr.b, instr.c]
-    elif instr.op in ("NEG","NOT","MOVE"):
+    elif instr.op in (
+        "ADD", "SUB", "MUL", "DIV", "POW",
+        "EQ", "NE", "LT", "GT", "LE", "GE", "AND",
+    ):
+        uses = []
+        if instr.b: uses.append(instr.b)
+        if instr.c: uses.append(instr.c)
+        return [instr.a], uses
+    elif instr.op in ("NEG", "NOT", "MOVE"):
         return [instr.a], [instr.b]
     elif instr.op == "STORE_VAR":
         return [], [instr.b]
     elif instr.op in ("PRINT",):
         return [], [instr.a]
     elif instr.op in ("JUMP", "JUMP_IF_TRUE", "JUMP_IF_FALSE"):
-        return [], [instr.a] if instr.op == "JUMP_IF_TRUE" or instr.op == "JUMP_IF_FALSE" else []
+        return [], [instr.a] if instr.op in ("JUMP_IF_TRUE", "JUMP_IF_FALSE") else []
     elif instr.op == "SPILL_STORE":
         return [], [instr.b]
     elif instr.op == "SPILL_LOAD":
         return [instr.a], []
+    elif instr.op == "CALL":
+        defs = [instr.c] if instr.c else []
+        uses = instr.arg_regs if hasattr(instr, 'arg_regs') else []
+        return defs, uses
+    elif instr.op == "RETURN":
+        return [], [instr.a] if instr.a else []
     else:
+        print(f"Warning: unknown op in regalloc: {instr.op}")
         return [], []
 def compute_live_ranges(code):
     first = {}

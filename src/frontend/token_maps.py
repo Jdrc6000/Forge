@@ -22,8 +22,6 @@ SINGLE_CHAR_TOKENS = {
     "*": TokenType.MUL,
     "/": TokenType.DIV,
     "^": TokenType.POW,
-    "(": TokenType.LPAREN,
-    ")": TokenType.RPAREN,
     "=": TokenType.EQ,
     "!": TokenType.BANG,
     "<": TokenType.LESS,
@@ -31,6 +29,10 @@ SINGLE_CHAR_TOKENS = {
     ",": TokenType.COMMA,
     ":": TokenType.COLON,
     ".": TokenType.DOT,
+    "(": TokenType.LPAREN,
+    ")": TokenType.RPAREN,
+    "{": TokenType.LBRACE,
+    "}": TokenType.RBRACE
 }
 
 COMPARISIONS = {
