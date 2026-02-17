@@ -1,14 +1,23 @@
 from src.frontend.token_maps import *
 from src.frontend.token import Token
 from src.frontend.token_types import *
+from src.exceptions import *
 
 class Lexer():
     def __init__(self, text):
         self.text = text
+        self.line = 1
+        self.col = 1
         self.pos = 0
         self.current_char = self.text[self.pos] if self.text else None
     
     def advance(self):
+        if self.current_char == "\n":
+            self.line += 1
+            self.col = 1
+        else:
+            self.col += 1
+        
         self.pos += 1
         
         if self.pos < len(self.text):
@@ -27,9 +36,10 @@ class Lexer():
     
     # had to crack this like the alan turing cracked cyphertext
     def number(self):
+        start_line = self.line
+        start_col = self.col
         num_str = ""
         dot_count = 0
-        start_pos = self.pos  # optional: for better error messages
 
         while self.current_char and self.current_char in "0123456789.":
             if self.current_char == ".":
@@ -37,7 +47,6 @@ class Lexer():
                 # Critical: if this is the first dot, peek ahead
                 if dot_count == 1:
                     next_char = self.peek()
-                    next_next_char = self.text[self.pos + 2] if self.pos + 2 < len(self.text) else None
                     # If we see . followed by another . → do NOT consume this dot as part of number
                     if next_char == ".":
                         break  # leave the .. for the range rule
@@ -49,17 +58,24 @@ class Lexer():
             self.advance()
 
         if not num_str:
-            raise Exception("Expected number")
+            raise LexerError(
+                message=f"Illegal character: {self.current_char!r}", # !r forces __repr__
+                token=Token(TokenType.ILLEGAL, self.current_char, self.line, self.col)
+            )
 
         if dot_count == 0:
-            return Token(TokenType.INT, int(num_str))
+            return Token(TokenType.INT, int(num_str), line=start_line, column=start_col)
         elif dot_count == 1 and num_str[-1] != ".":
-            return Token(TokenType.FLOAT, float(num_str))
+            return Token(TokenType.FLOAT, float(num_str), line=start_line, column=start_col)
         else:
-            # Optional: give better position info
-            raise Exception(f"Invalid number format near position {start_pos}: '{num_str}'")
+            raise LexerError(
+                message=f"Illegal character: {self.current_char!r}",
+                token=Token(TokenType.ILLEGAL, self.current_char, self.line, self.col)
+            )
     
     def string(self):
+        start_line = self.line
+        start_col = self.col
         string_val = ""
         quote_char = self.current_char
         self.advance() # skip opening quote
@@ -70,9 +86,11 @@ class Lexer():
         
         self.advance()
         
-        return Token(TokenType.STRING, string_val)
+        return Token(TokenType.STRING, string_val, line=start_line, column=start_col)
     
     def name(self):
+        start_line = self.line
+        start_col = self.col
         name_str = ""
 
         while self.current_char and (self.current_char.isalnum() or self.current_char == "_"):
@@ -80,11 +98,10 @@ class Lexer():
             self.advance()
 
         tok_type = KEYWORDS.get(name_str, TokenType.NAME)
-
-        if tok_type == TokenType.NAME:
-            return Token(tok_type, name_str)
-        else:
-            return Token(tok_type)
+        value = name_str if tok_type == TokenType.NAME else None
+        tok = Token(tok_type, value, line=start_line, column=start_col)
+        
+        return tok
     
     def get_tokens(self):
         tokens = []
@@ -98,36 +115,52 @@ class Lexer():
                 self.skip_whitespace()
             
             elif self.current_char == "!" and self.peek() == "=":
+                start_line = self.line
+                start_col = self.col
                 self.advance()
                 self.advance()
-                tokens.append(Token(TokenType.NE))
+                tokens.append(Token(TokenType.NE, line=start_line, column=start_col))
             elif self.current_char == "=" and self.peek() == "=":
+                start_line = self.line
+                start_col = self.col
                 self.advance()
                 self.advance()
-                tokens.append(Token(TokenType.EE))
+                tokens.append(Token(TokenType.EE, line=start_line, column=start_col))
             elif self.current_char == "<" and self.peek() == "=":
+                start_line = self.line
+                start_col = self.col
                 self.advance()
                 self.advance()
-                tokens.append(Token(TokenType.LE))
+                tokens.append(Token(TokenType.LE, line=start_line, column=start_col))
             elif self.current_char == ">" and self.peek() == "=":
+                start_line = self.line
+                start_col = self.col
                 self.advance()
                 self.advance()
-                tokens.append(Token(TokenType.GE))
-            elif self.current_char == ">":
+                tokens.append(Token(TokenType.GE, line=start_line, column=start_col))
+            elif self.current_char == "." and self.peek() == ".": # range
+                start_line = self.line
+                start_col = self.col
                 self.advance()
-                tokens.append(Token(TokenType.GREATER))
-            elif self.current_char == "<":
                 self.advance()
-                tokens.append(Token(TokenType.LESS))
+                tokens.append(Token(TokenType.RANGE, line=start_line, column=start_col))
             
-            elif self.current_char == "." and self.peek() == ".":
+            elif self.current_char == ">":
+                start_line = self.line
+                start_col = self.col
                 self.advance()
+                tokens.append(Token(TokenType.GREATER, line=start_line, column=start_col))
+            elif self.current_char == "<":
+                start_line = self.line
+                start_col = self.col
                 self.advance()
-                tokens.append(Token(TokenType.RANGE))
+                tokens.append(Token(TokenType.LESS, line=start_line, column=start_col))
             
             elif self.current_char in SINGLE_CHAR_TOKENS:
+                start_line = self.line
+                start_col = self.col
                 tok_type = SINGLE_CHAR_TOKENS[self.current_char]
-                tokens.append(Token(tok_type))
+                tokens.append(Token(tok_type, line=start_line, column=start_col))
                 self.advance()
             
             elif self.current_char.isdigit():
@@ -140,7 +173,10 @@ class Lexer():
                 tokens.append(self.string())
             
             else:
-                raise Exception(f"Illegal character: {self.current_char}")
+                raise LexerError(
+                    message=f"Illegal character: {self.current_char!r}",
+                    token=Token(TokenType.ILLEGAL, self.current_char, self.line, self.col)
+                )
         
         tokens.append(Token(TokenType.EOF))
         return tokens

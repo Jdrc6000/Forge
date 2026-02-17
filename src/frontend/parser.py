@@ -1,6 +1,7 @@
 from src.frontend.token_types import *
 from src.frontend.ast_nodes import *
 from src.frontend.token import Token
+from src.exceptions import *
 
 class Parser():
     def __init__(self, tokens):
@@ -93,7 +94,11 @@ class Parser():
                         elif self.current_token.type == TokenType.RPAREN:
                             break
                         else:
-                            raise Exception("Expected ',' or ')' in argument list")
+                            raise ParseError(
+                                message=f"Expected ',' or ')' in argument list",
+                                line=self.current_token.line,
+                                column=self.current_token.column
+                            )
 
                 self.advance()  # skip ')'
                 return Call(node, args)
@@ -108,7 +113,12 @@ class Parser():
                 expr = self.parse_expr()
             
             if self.current_token.type != TokenType.RPAREN:
-                raise Exception("Expected ')' after expression")
+                raise ParseError(
+                    message=f"Expected ')' after expression",
+                    line=self.current_token.line,
+                    column=self.current_token.column
+                )
+            
             self.advance()
             return expr
         
@@ -121,19 +131,31 @@ class Parser():
             return Constant(False)
         
         else:
-            raise Exception(f"Unexpected token: {tok}")
+            raise ParseError(
+                message=f"Unexpected token: {tok}",
+                line=self.current_token.line,
+                column=self.current_token.column
+            )
     
     def parse_print(self):
-        # CONSUME
+        print_token = self.current_token
         self.advance()
         if self.current_token.type != TokenType.LPAREN:
-            raise Exception("Expected '(' after print")
+            raise ParseError(
+                message=f"Expected '(' after print",
+                line=print_token.line,
+                column=print_token.column
+            )
         self.advance()
         
         expr_node = self.parse_expr()
         
         if self.current_token.type != TokenType.RPAREN:
-            raise Exception("Expected ')' after print argument")
+            raise ParseError(
+                message=f"Expected ')' after print arguments",
+                line=print_token.line,
+                column=print_token.column
+            )
         self.advance()
         
         return Call(
@@ -146,7 +168,11 @@ class Parser():
         self.advance()
         
         if self.current_token.type != TokenType.EQ:
-            raise Exception("Expected '=' after variable name")
+            raise ParseError(
+                message=f"Expected '=' after variable name",
+                line=name_token.line,
+                column=name_token.column
+            )
         self.advance()
         
         value_node = self.parse_expr()
@@ -251,27 +277,47 @@ class Parser():
     def parse_function(self):
         self.advance()  # consume 'fn'
         if self.current_token.type != TokenType.NAME:
-            raise Exception("Expected function name")
+            raise ParseError(
+                message=f"Expected function name",
+                line=self.current_token.line,
+                column=self.current_token.column
+            )
         func_name = self.current_token.value
         self.advance()
 
         if self.current_token.type != TokenType.LPAREN:
-            raise Exception("Expected '(' after function name")
+            raise ParseError(
+                message=f"Expected ')' after function name",
+                line=self.current_token.line,
+                column=self.current_token.column
+            )
         self.advance()
 
         args = []
         if self.current_token.type != TokenType.RPAREN:
             while True:
                 if self.current_token.type != TokenType.NAME:
-                    raise Exception("Expected argument name")
+                    raise ParseError(
+                        message=f"Expected argument name",
+                        line=self.current_token.line,
+                        column=self.current_token.column
+                    )
+                
                 args.append(self.current_token.value)
                 self.advance()
+                
                 if self.current_token.type == TokenType.RPAREN:
                     break
+                
                 elif self.current_token.type == TokenType.COMMA:
                     self.advance()
+                
                 else:
-                    raise Exception("Expected ',' or ')'")
+                    raise ParseError(
+                        message=f"Expected ',' or ')'",
+                        line=self.current_token.line,
+                        column=self.current_token.column
+                    )
 
         self.advance()  # consume ')'
 
@@ -293,7 +339,11 @@ class Parser():
             
             else:
                 if self.current_token.type != TokenType.LBRACE:
-                    raise Exception("Expected '{' or 'if' after 'else'")
+                    raise ParseError(
+                        message="Expected '{' or 'if' after 'else'",
+                        line=self.current_token.line,
+                        column=self.current_token.column
+                    )
                 # else { ... }
                 orelse = self.parse_block().statements
 
@@ -310,7 +360,11 @@ class Parser():
         self.advance()  # skip function name
 
         if self.current_token.type != TokenType.LPAREN:
-            raise Exception("Expected '(' in function call")
+            raise ParseError(
+                message=f"Expected '(' in function call",
+                line=self.current_token.line,
+                column=self.current_token.column
+            )
         self.advance()  # skip '('
 
         args = []
@@ -322,7 +376,11 @@ class Parser():
                 elif self.current_token.type == TokenType.RPAREN:
                     break
                 else:
-                    raise Exception("Expected ',' or ')' in argument list")
+                    raise ParseError(
+                        message="Expected ',' or ')' in argument list",
+                        line=self.current_token.line,
+                        column=self.current_token.column
+                    )
         
         self.advance()  # skip ')'
         return Call(Name(func_name), args)
@@ -331,18 +389,30 @@ class Parser():
         self.advance()  # skip 'for'
 
         if self.current_token.type != TokenType.NAME:
-            raise Exception("Expected loop variable name")
+            raise ParseError(
+                message=f"Expected loop variable name",
+                line=self.current_token.line,
+                column=self.current_token.column
+            )
         loop_var = Name(self.current_token.value)
         self.advance()
 
         if self.current_token.type != TokenType.IN:
-            raise Exception("Expected 'in' in for loop")
+            raise ParseError(
+                message=f"Expected 'in' in for loop",
+                line=self.current_token.line,
+                column=self.current_token.column
+            )
         self.advance()
 
         start = self.parse_expr()
 
         if self.current_token.type != TokenType.RANGE:
-            raise Exception("Expected '..' in for loop")
+            raise ParseError(
+                message=f"Expected '..' in for loop",
+                line=self.current_token.line,
+                column=self.current_token.column
+            )
         self.advance()
 
         end = self.parse_expr()
@@ -357,7 +427,11 @@ class Parser():
     
     def parse_block(self):
         if self.current_token.type != TokenType.LBRACE:
-            raise Exception("Expected '{' to start block")
+            raise ParseError(
+                message="Expected '{' to start block",
+                line=self.current_token.line,
+                column=self.current_token.column
+            )
         self.advance() # eat '{'
         
         body = []
@@ -367,7 +441,11 @@ class Parser():
                 body.append(stmt)
         
         if self.current_token.type != TokenType.RBRACE:
-            raise Exception("Expected '}' to close block")
+            raise ParseError(
+                message="Expected '}' to close block",
+                line=self.current_token.line,
+                column=self.current_token.column
+            )
         self.advance() # eat '}'
         
         return Block(body)

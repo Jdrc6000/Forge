@@ -8,6 +8,13 @@ from src.ir.generator import IRGenerator
 from src.runtime.regalloc import linear_scan_allocate
 from src.runtime.vm import VM
 from src.ir.operands import Reg, Imm
+from src.exceptions import *
+def fmt(x):
+    if isinstance(x, Reg):
+        return f"r{x.id}"
+    if isinstance(x, Imm):
+        return x.value
+    return x
 code = """
 fn check(num) {
     if num == 1 {
@@ -19,44 +26,112 @@ fn check(num) {
     }
 }
 print(check(2))
+print
 """
-start = time()
-lexer = Lexer(code)
-tokens = lexer.get_tokens()
-print(tokens)
-parser = Parser(tokens)
-tree = parser.parse()
-parser.dump(tree)
-symbol_table = SymbolTable()
-semantic_analysis = Analyser(symbol_table)
-semantic_analysis.analyse(tree)
-optimiser = Optimiser()
-tree = optimiser.optimize(tree)
-parser.dump(tree)
-ir_generator = IRGenerator()
-ir_generator.generate(tree)
-ir_generator.ir.dump()
 num_regs = 1024
-allocated = linear_scan_allocate(ir_generator.ir.code, num_regs=num_regs)
-def fmt(x):
-    if isinstance(x, Reg):
-        return f"r{x.id}"
-    if isinstance(x, Imm):
-        return x.value
-    return x
-for i, instr in enumerate(allocated):
-    print(f"realloc{i} {instr.op} {fmt(instr.a)} {fmt(instr.b)} {fmt(instr.c)}")
-vm = VM(num_regs=num_regs)
-vm.code = allocated
-start_ip = vm.find_label("__main__")
-vm.ip = start_ip
-vm.run(allocated)
-vm.dump_regs()
-print(f"took {time() - start} secs")
+start = time()
+try:
+    lexer = Lexer(code)
+    tokens = lexer.get_tokens()
+    print(tokens)
+    parser = Parser(tokens)
+    tree = parser.parse()
+    parser.dump(tree)
+    symbol_table = SymbolTable()
+    semantic_analysis = Analyser(symbol_table)
+    semantic_analysis.analyse(tree)
+    optimiser = Optimiser()
+    tree = optimiser.optimize(tree)
+    parser.dump(tree)
+    ir_generator = IRGenerator()
+    ir_generator.generate(tree)
+    ir_generator.ir.dump()
+    allocated = linear_scan_allocate(ir_generator.ir.code, num_regs=num_regs)
+    for i, instr in enumerate(allocated):
+        print(f"realloc{i} {instr.op} {fmt(instr.a)} {fmt(instr.b)} {fmt(instr.c)}")
+    vm = VM(num_regs=num_regs)
+    vm.code = allocated
+    start_ip = vm.find_label("__main__")
+    vm.ip = start_ip
+    vm.run(allocated)
+    vm.dump_regs()
+    print(f"took {time() - start} secs")
+except CompileError as e:
+    print(e)
+    print(format_diagnostic(
+        source=code,
+        filename="<string>",
+        line=e.line or 1,
+        column=e.column or 1,
+        message=e.message,
+        level=e.level,
+        highlight_length=1
+    ))
+    exit(1)
+except Exception as e:
+    print(f"random error that shouldnt of appeared appeared: {e}")
+    raise
+
+--- src/exceptions.py ---
+from dataclasses import dataclass
+from typing import Optional
+from src.frontend.token import Token
+def format_diagnostic(
+    source: str,
+    filename: str,
+    line: int,
+    column: int,
+    message: str,
+    level: str = "error",
+    highlight_length: int = 1
+) -> str:
+    lines = source.splitlines()
+    if not (1 <= line <= len(lines)):
+        return f"{filename}:{line}:{column}: {level}: {message} (line out of range)"
+    lineno = line - 1
+    bad_line = lines[lineno].rstrip()
+    MAX = 72
+    start = max(0, column - 1 - MAX // 2)
+    end = min(len(bad_line), start + MAX)
+    snippet = bad_line[start:end]
+    caret_pos = (column - 1) - start
+    color = {
+        "error":   "\033[91m",
+        "warning": "\033[93m",
+        "note":    "\033[94m",
+    }.get(level, "")
+    reset = "\033[0m"
+    return (
+        f"{filename}:{line}:{column}: {color}{level}:{reset} {message}\n"
+        f"   {line:3} │ {snippet}\n"
+        f"      │ {' ' * caret_pos}{'^' * highlight_length}\n"
+    )
+@dataclass
+class CompileError(Exception):
+    message: str
+    token: Optional[Token] = None
+    line: Optional[int] = None
+    column: Optional[int] = None
+    level: str = "error"
+    def __post_init__(self):
+        if self.token:
+            self.line = self.line or self.token.line
+            self.column = self.column or self.token.column
+    def __str__(self) -> str:
+        loc = ""
+        if self.line is not None:
+            loc = f"[{self.line}:{self.column or "?"}] "
+        return f"{self.level.upper()} {loc}{self.message}"
+class LexerError(CompileError): pass
+class ParseError(CompileError): pass
+class SemanticError(CompileError): pass
+class TypeError(CompileError): pass
+class UndefinedVariableError(SemanticError): pass
+class UnreachableCodeWarning(CompileError): pass
 
 --- src/frontend/ast_nodes.py ---
-from dataclasses import dataclass
-from typing import List, Optional, Any, Union
+from dataclasses import dataclass, field
+from typing import List, Optional, Any, Union, Tuple
 class AST():
     inferred_type = None
 @dataclass
@@ -124,12 +199,20 @@ class Block(AST):
 from src.frontend.token_maps import *
 from src.frontend.token import Token
 from src.frontend.token_types import *
+from src.exceptions import *
 class Lexer():
     def __init__(self, text):
         self.text = text
+        self.line = 1
+        self.col = 1
         self.pos = 0
         self.current_char = self.text[self.pos] if self.text else None
     def advance(self):
+        if self.current_char == "\n":
+            self.line += 1
+            self.col = 1
+        else:
+            self.col += 1
         self.pos += 1
         if self.pos < len(self.text):
             self.current_char = self.text[self.pos]
@@ -143,15 +226,15 @@ class Lexer():
             return self.text[self.pos + 1]
         return None
     def number(self):
+        start_line = self.line
+        start_col = self.col
         num_str = ""
         dot_count = 0
-        start_pos = self.pos
         while self.current_char and self.current_char in "0123456789.":
             if self.current_char == ".":
                 dot_count += 1
                 if dot_count == 1:
                     next_char = self.peek()
-                    next_next_char = self.text[self.pos + 2] if self.pos + 2 < len(self.text) else None
                     if next_char == ".":
                         break
                     if next_char is None or not next_char.isdigit():
@@ -159,14 +242,22 @@ class Lexer():
             num_str += self.current_char
             self.advance()
         if not num_str:
-            raise Exception("Expected number")
+            raise LexerError(
+                message=f"Illegal character: {self.current_char!r}",
+                token=Token(TokenType.ILLEGAL, self.current_char, self.line, self.col)
+            )
         if dot_count == 0:
-            return Token(TokenType.INT, int(num_str))
+            return Token(TokenType.INT, int(num_str), line=start_line, column=start_col)
         elif dot_count == 1 and num_str[-1] != ".":
-            return Token(TokenType.FLOAT, float(num_str))
+            return Token(TokenType.FLOAT, float(num_str), line=start_line, column=start_col)
         else:
-            raise Exception(f"Invalid number format near position {start_pos}: '{num_str}'")
+            raise LexerError(
+                message=f"Illegal character: {self.current_char!r}",
+                token=Token(TokenType.ILLEGAL, self.current_char, self.line, self.col)
+            )
     def string(self):
+        start_line = self.line
+        start_col = self.col
         string_val = ""
         quote_char = self.current_char
         self.advance()
@@ -174,17 +265,18 @@ class Lexer():
             string_val += self.current_char
             self.advance()
         self.advance()
-        return Token(TokenType.STRING, string_val)
+        return Token(TokenType.STRING, string_val, line=start_line, column=start_col)
     def name(self):
+        start_line = self.line
+        start_col = self.col
         name_str = ""
         while self.current_char and (self.current_char.isalnum() or self.current_char == "_"):
             name_str += self.current_char
             self.advance()
         tok_type = KEYWORDS.get(name_str, TokenType.NAME)
-        if tok_type == TokenType.NAME:
-            return Token(tok_type, name_str)
-        else:
-            return Token(tok_type)
+        value = name_str if tok_type == TokenType.NAME else None
+        tok = Token(tok_type, value, line=start_line, column=start_col)
+        return tok
     def get_tokens(self):
         tokens = []
         while self.current_char is not None:
@@ -194,34 +286,50 @@ class Lexer():
             elif self.current_char.isspace():
                 self.skip_whitespace()
             elif self.current_char == "!" and self.peek() == "=":
+                start_line = self.line
+                start_col = self.col
                 self.advance()
                 self.advance()
-                tokens.append(Token(TokenType.NE))
+                tokens.append(Token(TokenType.NE, line=start_line, column=start_col))
             elif self.current_char == "=" and self.peek() == "=":
+                start_line = self.line
+                start_col = self.col
                 self.advance()
                 self.advance()
-                tokens.append(Token(TokenType.EE))
+                tokens.append(Token(TokenType.EE, line=start_line, column=start_col))
             elif self.current_char == "<" and self.peek() == "=":
+                start_line = self.line
+                start_col = self.col
                 self.advance()
                 self.advance()
-                tokens.append(Token(TokenType.LE))
+                tokens.append(Token(TokenType.LE, line=start_line, column=start_col))
             elif self.current_char == ">" and self.peek() == "=":
+                start_line = self.line
+                start_col = self.col
                 self.advance()
                 self.advance()
-                tokens.append(Token(TokenType.GE))
-            elif self.current_char == ">":
-                self.advance()
-                tokens.append(Token(TokenType.GREATER))
-            elif self.current_char == "<":
-                self.advance()
-                tokens.append(Token(TokenType.LESS))
+                tokens.append(Token(TokenType.GE, line=start_line, column=start_col))
             elif self.current_char == "." and self.peek() == ".":
+                start_line = self.line
+                start_col = self.col
                 self.advance()
                 self.advance()
-                tokens.append(Token(TokenType.RANGE))
+                tokens.append(Token(TokenType.RANGE, line=start_line, column=start_col))
+            elif self.current_char == ">":
+                start_line = self.line
+                start_col = self.col
+                self.advance()
+                tokens.append(Token(TokenType.GREATER, line=start_line, column=start_col))
+            elif self.current_char == "<":
+                start_line = self.line
+                start_col = self.col
+                self.advance()
+                tokens.append(Token(TokenType.LESS, line=start_line, column=start_col))
             elif self.current_char in SINGLE_CHAR_TOKENS:
+                start_line = self.line
+                start_col = self.col
                 tok_type = SINGLE_CHAR_TOKENS[self.current_char]
-                tokens.append(Token(tok_type))
+                tokens.append(Token(tok_type, line=start_line, column=start_col))
                 self.advance()
             elif self.current_char.isdigit():
                 tokens.append(self.number())
@@ -230,7 +338,10 @@ class Lexer():
             elif self.current_char in "\"'":
                 tokens.append(self.string())
             else:
-                raise Exception(f"Illegal character: {self.current_char}")
+                raise LexerError(
+                    message=f"Illegal character: {self.current_char!r}",
+                    token=Token(TokenType.ILLEGAL, self.current_char, self.line, self.col)
+                )
         tokens.append(Token(TokenType.EOF))
         return tokens
 
@@ -238,6 +349,7 @@ class Lexer():
 from src.frontend.token_types import *
 from src.frontend.ast_nodes import *
 from src.frontend.token import Token
+from src.exceptions import *
 class Parser():
     def __init__(self, tokens):
         self.tokens = tokens
@@ -306,7 +418,11 @@ class Parser():
                         elif self.current_token.type == TokenType.RPAREN:
                             break
                         else:
-                            raise Exception("Expected ',' or ')' in argument list")
+                            raise ParseError(
+                                message=f"Expected ',' or ')' in argument list",
+                                line=self.current_token.line,
+                                column=self.current_token.column
+                            )
                 self.advance()
                 return Call(node, args)
             return node
@@ -317,7 +433,11 @@ class Parser():
             else:
                 expr = self.parse_expr()
             if self.current_token.type != TokenType.RPAREN:
-                raise Exception("Expected ')' after expression")
+                raise ParseError(
+                    message=f"Expected ')' after expression",
+                    line=self.current_token.line,
+                    column=self.current_token.column
+                )
             self.advance()
             return expr
         elif tok.type == TokenType.TRUE:
@@ -327,15 +447,27 @@ class Parser():
             self.advance()
             return Constant(False)
         else:
-            raise Exception(f"Unexpected token: {tok}")
+            raise ParseError(
+                message=f"Unexpected token: {tok}",
+                line=self.current_token.line,
+                column=self.current_token.column
+            )
     def parse_print(self):
         self.advance()
         if self.current_token.type != TokenType.LPAREN:
-            raise Exception("Expected '(' after print")
+            raise ParseError(
+                message=f"Expected '(' after print",
+                line=self.current_token.line,
+                column=self.current_token.column
+            )
         self.advance()
         expr_node = self.parse_expr()
         if self.current_token.type != TokenType.RPAREN:
-            raise Exception("Expected ')' after print argument")
+            raise ParseError(
+                message=f"Expected ')' after print arguments",
+                line=self.current_token.line,
+                column=self.current_token.column
+            )
         self.advance()
         return Call(
             func=Name("print"),
@@ -345,7 +477,11 @@ class Parser():
         name_token = self.current_token
         self.advance()
         if self.current_token.type != TokenType.EQ:
-            raise Exception("Expected '=' after variable name")
+            raise ParseError(
+                message=f"Expected '=' after variable name",
+                line=self.current_token.line,
+                column=self.current_token.column
+            )
         self.advance()
         value_node = self.parse_expr()
         return Assign(
@@ -424,17 +560,29 @@ class Parser():
     def parse_function(self):
         self.advance()
         if self.current_token.type != TokenType.NAME:
-            raise Exception("Expected function name")
+            raise ParseError(
+                message=f"Expected function name",
+                line=self.current_token.line,
+                column=self.current_token.column
+            )
         func_name = self.current_token.value
         self.advance()
         if self.current_token.type != TokenType.LPAREN:
-            raise Exception("Expected '(' after function name")
+            raise ParseError(
+                message=f"Expected ')' after function name",
+                line=self.current_token.line,
+                column=self.current_token.column
+            )
         self.advance()
         args = []
         if self.current_token.type != TokenType.RPAREN:
             while True:
                 if self.current_token.type != TokenType.NAME:
-                    raise Exception("Expected argument name")
+                    raise ParseError(
+                        message=f"Expected argument name",
+                        line=self.current_token.line,
+                        column=self.current_token.column
+                    )
                 args.append(self.current_token.value)
                 self.advance()
                 if self.current_token.type == TokenType.RPAREN:
@@ -442,7 +590,11 @@ class Parser():
                 elif self.current_token.type == TokenType.COMMA:
                     self.advance()
                 else:
-                    raise Exception("Expected ',' or ')'")
+                    raise ParseError(
+                        message=f"Expected ',' or ')'",
+                        line=self.current_token.line,
+                        column=self.current_token.column
+                    )
         self.advance()
         body = self.parse_block()
         return FunctionDef(func_name, args, body)
@@ -457,7 +609,11 @@ class Parser():
                 orelse = [self.parse_if()]
             else:
                 if self.current_token.type != TokenType.LBRACE:
-                    raise Exception("Expected '{' or 'if' after 'else'")
+                    raise ParseError(
+                        message="Expected '{' or 'if' after 'else'",
+                        line=self.current_token.line,
+                        column=self.current_token.column
+                    )
                 orelse = self.parse_block().statements
         return If(test, body, orelse)
     def parse_while(self):
@@ -469,7 +625,11 @@ class Parser():
         func_name = self.current_token.value
         self.advance()
         if self.current_token.type != TokenType.LPAREN:
-            raise Exception("Expected '(' in function call")
+            raise ParseError(
+                message=f"Expected '(' in function call",
+                line=self.current_token.line,
+                column=self.current_token.column
+            )
         self.advance()
         args = []
         if self.current_token.type != TokenType.RPAREN:
@@ -480,21 +640,37 @@ class Parser():
                 elif self.current_token.type == TokenType.RPAREN:
                     break
                 else:
-                    raise Exception("Expected ',' or ')' in argument list")
+                    raise ParseError(
+                        message="Expected ',' or ')' in argument list",
+                        line=self.current_token.line,
+                        column=self.current_token.column
+                    )
         self.advance()
         return Call(Name(func_name), args)
     def parse_for(self):
         self.advance()
         if self.current_token.type != TokenType.NAME:
-            raise Exception("Expected loop variable name")
+            raise ParseError(
+                message=f"Expected loop variable name",
+                line=self.current_token.line,
+                column=self.current_token.column
+            )
         loop_var = Name(self.current_token.value)
         self.advance()
         if self.current_token.type != TokenType.IN:
-            raise Exception("Expected 'in' in for loop")
+            raise ParseError(
+                message=f"Expected 'in' in for loop",
+                line=self.current_token.line,
+                column=self.current_token.column
+            )
         self.advance()
         start = self.parse_expr()
         if self.current_token.type != TokenType.RANGE:
-            raise Exception("Expected '..' in for loop")
+            raise ParseError(
+                message=f"Expected '..' in for loop",
+                line=self.current_token.line,
+                column=self.current_token.column
+            )
         self.advance()
         end = self.parse_expr()
         body = self.parse_block()
@@ -505,7 +681,11 @@ class Parser():
         return Return(value)
     def parse_block(self):
         if self.current_token.type != TokenType.LBRACE:
-            raise Exception("Expected '{' to start block")
+            raise ParseError(
+                message="Expected '{' to start block",
+                line=self.current_token.line,
+                column=self.current_token.column
+            )
         self.advance()
         body = []
         while self.current_token.type not in (TokenType.RBRACE, TokenType.EOF):
@@ -513,7 +693,11 @@ class Parser():
             if stmt is not None:
                 body.append(stmt)
         if self.current_token.type != TokenType.RBRACE:
-            raise Exception("Expected '}' to close block")
+            raise ParseError(
+                message="Expected '}' to close block",
+                line=self.current_token.line,
+                column=self.current_token.column
+            )
         self.advance()
         return Block(body)
     def token_to_op(self, token):
@@ -725,6 +909,7 @@ class TokenType(Enum):
     RPAREN = auto()
     LBRACE = auto()
     RBRACE = auto()
+    ILLEGAL = auto()
 
 --- src/ir/generator.py ---
 from src.frontend.ast_nodes import *

@@ -1,5 +1,5 @@
-from dataclasses import dataclass
-from typing import List, Optional, Any, Union
+from dataclasses import dataclass, field
+from typing import List, Optional, Any, Union, Tuple
 
 class AST():
     inferred_type = None
