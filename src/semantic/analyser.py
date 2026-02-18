@@ -21,8 +21,34 @@ class Analyser():
                 self.analyse(stmt)
         
         elif isinstance(node, Call):
-            if node.func.id != "print" and not self.symbols.exists(node.func.id):
-                raise UndefinedVariableError(f"Undefined function '{node.func.id}'")
+            if node.func.id == "print":
+                for arg in node.args:
+                    self.analyse(arg)
+                return None
+            
+            func_name = node.func.id
+            
+            if not self.symbols.exists(func_name):
+                raise UndefinedVariableError(
+                    message=f"Undefined function '{func_name}'",
+                    token=node.func
+                )
+            
+            sym = self.symbols.get(func_name)
+            if sym["type"] != "function":
+                raise TypeError(
+                    message=f"'{func_name}' is not a function",
+                    token=node.func
+                )
+            
+            expected = sym.get("param_count")
+            actual = len(node.args)
+            if expected is not None and actual != expected:
+                raise TypeError(
+                    message=f"Function '{func_name}' expected {expected} argument(s), but {len(node.args)} given",
+                    token=node
+                )
+            
             for arg in node.args:
                 self.analyse(arg)
             
@@ -38,7 +64,10 @@ class Analyser():
         
         elif isinstance(node, Name):
             if not self.symbols.exists(node.id):
-                raise Exception(f"Undefined variable '{node.id}'")
+                raise UndefinedVariableError(
+                    message=f"Undefined variable '{node.id}'",
+                    token=node
+                )
             
             return self.symbols.get(node.id)["type"]
         
@@ -71,7 +100,10 @@ class Analyser():
                 node.right.inferred_type = left
 
             if not left.supports_binary(node.op, right):
-                raise TypeError(f"Operator '{node.op}' not supported between {left} and {right}")
+                raise TypeError(
+                    message=f"Operator '{node.op}' not supported between {left} and {right}",
+                    token=node
+                )
 
             node.inferred_type = left
             return left
@@ -79,7 +111,10 @@ class Analyser():
         elif isinstance(node, If):
             test_type = self.analyse(node.test)
             if test_type not in (BOOL, UNKNOWN) and test_type is not None:
-                raise TypeError("If condition must be boolean")
+                raise TypeError(
+                    message="If condition must be boolean",
+                    token=node
+                )
 
             for stmt in node.body:
                 self.analyse(stmt)
@@ -93,14 +128,21 @@ class Analyser():
             right = self.analyse(node.comparators[0])
 
             if not left.is_compatible(right):
-                raise TypeError(f"Cannot compare {left} with {right}")
+                raise TypeError(
+                    message=f"Cannot compare {left} with {right}",
+                    token=node
+                )
 
             node.inferred_type = BOOL
             return BOOL
 
         # here be dragons, lets hope it works
         elif isinstance(node, FunctionDef):
-            self.symbols.define(node.name, "function")
+            self.symbols.define(node.name, {
+                "type": "function",
+                "param_count": len(node.args),
+                "params": node.args
+            })
             
             self.symbols.enter_scope()
             old_fn = self.current_function
@@ -117,7 +159,10 @@ class Analyser():
         
         elif isinstance(node, Return):
             if self.current_function is None:
-                raise Exception("Return outside function")
+                raise SemanticError(
+                    message="Return outside function",
+                    token= node
+                )
 
             if node.value:
                 return_type = self.analyse(node.value)
@@ -129,7 +174,11 @@ class Analyser():
         elif isinstance(node, While):
             test_type = self.analyse(node.test)
             if test_type not in (BOOL, UNKNOWN) and test_type is not None:
-                raise TypeError("While condition must be boolean")
+                raise TypeError(
+                    message="While condition must be boolean",
+                    token=node
+                )
+            
             for stmt in node.body:
                 self.analyse(stmt)
         
@@ -138,7 +187,10 @@ class Analyser():
             end_type = self.analyse(node.end)
 
             if start_type != NUMBER or end_type != NUMBER:
-                raise TypeError("For loop start and end must be numbers")
+                raise TypeError(
+                    message="For loop start and end must be numbers",
+                    token=node
+                )
 
             self.symbols.define(node.target.id, NUMBER)
 

@@ -3,7 +3,10 @@ class SymbolTable():
         self.scopes = [{}]  # stack of scopes
     
     def define(self, name, _type):
-        self.scopes[-1][name] = {"type": _type}
+        if isinstance(_type, dict):
+            self.scopes[-1][name] = _type
+        else:
+            self.scopes[-1][name] = {"type": _type}
     
     def exists(self, name):
         return any(name in scope for scope in self.scopes)

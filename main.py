@@ -31,7 +31,7 @@ fn check(a) {
     }
 }
 
-print(check(4))
+print(check(2))
 """
 num_regs = 1024
 start = time()
@@ -75,7 +75,6 @@ try:
     print(f"took {time() - start_vm} secs to run vm")
 
 except CompileError as e:
-    print(e)
     print(format_diagnostic(
         source=code,
         filename="<string>",
@@ -87,6 +86,17 @@ except CompileError as e:
     ))
     exit(1)
 
+except RuntimeError as e:
+    print(format_diagnostic(
+        source=code,
+        filename="<string>",
+        line=e.line or 1,
+        column=e.column or 1,
+        message=e.message,
+        highlight_length=1
+    ))
+    exit(1)
+
 except IndexError as e:
     raise RuntimeError(f"number of regs prolly too low: {e}") from e
 
@@ -94,12 +104,14 @@ except Exception as e:
     raise RuntimeError(f"couldnt even begin to tell you where this came from: {e}") from e
 
 
-# timeline for additions:
-    # better errors (lineno / badline)
-    # real types
-    # structs + dot notation
-    # gc
-    # module system
-    # decent optimiser
-    # better backend (x86-64)
-    # self-hosting
+# timeline for additions
+#DONE better errors (lineno / badline)
+#     levenshtein "error: did you mean '...'?"
+#     real types
+#     structs + dot notation
+#     gc
+#     module system
+#     decent optimiser
+#     better backend (x86-64)
+#     bytecode + vm backend (its never too late to back down btw)
+#     self-hosting

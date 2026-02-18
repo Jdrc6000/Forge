@@ -1,4 +1,5 @@
-from src.frontend.token_types  import *
+from src.frontend.token_types import *
+from src.exceptions import *
 
 # past-josh: PLEASE FOR THE LOVE OF GOD REFACTOR TO REGISTER-BASED!!
 # future-josh: your wish is my command
@@ -12,7 +13,7 @@ class VM:
         self.vars = {}
         self.stack = {}
         self.call_stack = [] # (ip, locals)
-        self.code = None # to be set in /main.py
+        self.code = None # to be set in main.py
         self.ip = 0 # instruction pointer
     
     def dump_regs(self): # simple dump debugger
@@ -30,9 +31,15 @@ class VM:
         for i, instr in enumerate(self.code):
             if instr.op == "LABEL" and instr.a == label_name:
                 return i
-        raise RuntimeError(f"Label not found: {label_name}")
+        
+        raise LabelNotFoundError(
+            message=f"Label not found: {label_name}",
+            ip=self.ip
+        )
     
     def run(self, code):
+        self.code = code
+        
         while self.ip < len(code):
             instr = code[self.ip]
             op, a, b, c = instr.op, instr.a, instr.b, instr.c
@@ -110,7 +117,7 @@ class VM:
                 self.stack[a] = self.regs[b]
 
             elif op == "SPILL_LOAD":
-                self.regs[a] = self.stack[b]
+                self.regs[a] = self.stack[b] # im conflicted... is it a then b, or b then a??
             
             # arithmetic
             elif op == "ADD":
@@ -145,6 +152,11 @@ class VM:
                 self.regs[a.id] = self.regs[b.id] and self.regs[c.id]
 
             else:
-                raise RuntimeError(f"Unknown opcode {op}")
+                # i literally dont know what error type to use, so i just used compiler
+                raise UnknownOpcodeError(
+                    message=f"Unknown opcode {op}",
+                    ip=self.ip,
+                    instruction=f"{op} {instr.a} {instr.b} {instr.c}"
+                )
     
             self.ip += 1

@@ -50,7 +50,15 @@ class Parser():
             elif self.peek() and self.peek().type == TokenType.EQ:
                 return self.parse_assign()
             else:
-                return Expr(Name(self.current_token.value))
+                return Expr(
+                    value=Name(
+                        id=self.current_token.value,
+                        line=self.current_token.line,
+                        column=self.current_token.column
+                    ),
+                    line=self.current_token.line,
+                    column=self.current_token.column
+                )
         
         elif self.current_token.type == TokenType.FN:
             return self.parse_function()
@@ -64,22 +72,30 @@ class Parser():
         elif self.current_token.type == TokenType.RETURN:
             return self.parse_return()
         else:
-            return Expr(self.parse_expr())
+            return Expr(
+                value=self.parse_expr(),
+                line=self.current_token.line,
+                column=self.current_token.column
+            )
     
     def parse_primary(self):
         tok = self.current_token
         
-        if tok.type in (TokenType.INT, TokenType.FLOAT):
+        if tok.type in (TokenType.INT, TokenType.FLOAT, TokenType.STRING):
             self.advance()
-            return Constant(tok.value)
-        
-        elif tok.type == TokenType.STRING:
-            self.advance()
-            return Constant(tok.value)
+            return Constant(
+                value=tok.value,
+                line=tok.line,
+                column=tok.column
+            )
         
         elif tok.type == TokenType.NAME:
             self.advance()
-            node = Name(tok.value)
+            node = Name(
+                id=tok.value,
+                line=tok.line,
+                column=tok.column
+            )
 
             # handle call syntax
             if self.current_token.type == TokenType.LPAREN:
@@ -101,7 +117,12 @@ class Parser():
                             )
 
                 self.advance()  # skip ')'
-                return Call(node, args)
+                return Call(
+                    func=node,
+                    args=args,
+                    line=self.current_token.line,
+                    column=self.current_token.column
+                )
 
             return node
 
@@ -124,11 +145,19 @@ class Parser():
         
         elif tok.type == TokenType.TRUE:
             self.advance()
-            return Constant(True)
+            return Constant(
+                value=True,
+                line=tok.line,
+                column=tok.column
+            )
 
         elif tok.type == TokenType.FALSE:
             self.advance()
-            return Constant(False)
+            return Constant(
+                value=False,
+                line=tok.line,
+                column=tok.column
+            )
         
         else:
             raise ParseError(
@@ -159,8 +188,14 @@ class Parser():
         self.advance()
         
         return Call(
-            func=Name("print"), # because it makes the interpreter happy
-            args=[expr_node]
+            func=Name(
+                id="print", # because it makes the interpreter happy
+                line=print_token.line,
+                column=print_token.column
+            ),
+            args=[expr_node],
+            line=print_token.line,
+            column=print_token.column
         )
     
     def parse_assign(self):
@@ -178,11 +213,18 @@ class Parser():
         value_node = self.parse_expr()
         
         return Assign(
-            target=Name(name_token.value),
-            value=value_node
+            target=Name(
+                id=name_token.value,
+                line=name_token.line,
+                column=name_token.column
+            ),
+            value=value_node,
+            line=name_token.line,
+            column=name_token.column
         )
     
     def parse_comparison(self):
+        comparision_token = self.current_token
         left = self.parse_binop()
         ops = []
         comparators = []
@@ -204,7 +246,13 @@ class Parser():
             comparators.append(self.parse_binop())
 
         if ops:
-            return Compare(left, ops, comparators)
+            return Compare(
+                left=left,
+                ops=ops,
+                comparators=comparators,
+                line=comparision_token.line,
+                column=comparision_token.column
+            )
         return left
     
     def parse_logic_or(self):
@@ -213,7 +261,13 @@ class Parser():
         while self.current_token.type == TokenType.OR:
             self.advance()
             right = self.parse_logic_and()
-            left = BinOp(left, "or", right)
+            left = BinOp(
+                left=left,
+                ops="or",
+                right=right,
+                line=self.current_token.line,
+                column=self.current_token.column
+            )
         
         return left
 
@@ -223,7 +277,13 @@ class Parser():
         while self.current_token.type == TokenType.AND:
             self.advance()
             right = self.parse_comparison()
-            left = BinOp(left, "and", right)
+            left = BinOp(
+                left=left,
+                ops="and",
+                right=right,
+                line=self.current_token.line,
+                column=self.current_token.column
+            )
         
         return left
     
@@ -251,8 +311,10 @@ class Parser():
                 right = self.parse_binop(prec+1)
                 left = BinOp(
                     left=left,
-                    op=self.token_to_op(op_token),
-                    right=right
+                    ops=self.token_to_op(op_token),
+                    right=right,
+                    line=self.current_token.line,
+                    column=self.current_token.column
                 )
 
             else:
@@ -269,7 +331,12 @@ class Parser():
         
         elif tok.type == TokenType.NOT:
             self.advance()
-            return UnOp(op="not", operand=self.parse_unary())
+            return UnOp(
+                ops="not",
+                operand=self.parse_unary(),
+                line=tok.line,
+                column=tok.column
+            )
         
         else:
             return self.parse_primary()
@@ -324,9 +391,16 @@ class Parser():
 
         body = self.parse_block()
 
-        return FunctionDef(func_name, args, body)
+        return FunctionDef(
+            name=func_name,
+            args=args,
+            body=body,
+            line=function_token.line,
+            column=function_token.column
+        )
     
     def parse_if(self):
+        if_token = self.current_token
         self.advance()  # skip 'if'
         test = self.parse_expr()
         body = self.parse_block()
@@ -348,16 +422,28 @@ class Parser():
                 # else { ... }
                 orelse = self.parse_block()
 
-        return If(test, body, orelse)
+        return If(
+            test=test,
+            body=body,
+            orelse=orelse,
+            line=if_token.line,
+            column=if_token.column
+        )
     
     def parse_while(self):
+        while_token = self.current_token
         self.advance()  # skip 'while'
         test = self.parse_expr()
         body = self.parse_block()
-        return While(test, body)
+        return While(
+            test=test,
+            body=body,
+            line=while_token.line,
+            column=while_token.column
+        )
     
     def parse_call(self):
-        func_name = self.current_token.value
+        func_token = self.current_token
         self.advance()  # skip function name
 
         if self.current_token.type != TokenType.LPAREN:
@@ -384,9 +470,19 @@ class Parser():
                     )
         
         self.advance()  # skip ')'
-        return Call(Name(func_name), args)
+        return Call(
+            func=Name(
+                id=func_token.value,
+                line=func_token.line,
+                column=func_token.column
+            ),
+            args=args,
+            line=func_token.line,
+            column=func_token.column
+        )
 
     def parse_for(self):
+        for_token = self.current_token
         self.advance()  # skip 'for'
 
         if self.current_token.type != TokenType.NAME:
@@ -395,7 +491,11 @@ class Parser():
                 line=self.current_token.line,
                 column=self.current_token.column
             )
-        loop_var = Name(self.current_token.value)
+        loop_var = Name(
+            id=self.current_token.value,
+            line=self.current_token.line,
+            column=self.current_token.column
+        )
         self.advance()
 
         if self.current_token.type != TokenType.IN:
@@ -419,14 +519,28 @@ class Parser():
         end = self.parse_expr()
         body = self.parse_block()
         
-        return For(loop_var, start, end, body)
+        return For(
+            target=loop_var,
+            start=start,
+            end=end,
+            body=body,
+            line=for_token.line,
+            column=for_token.column
+        )
 
     def parse_return(self):
+        return_token = self.current_token
         self.advance()  # consume 'return'
         value = self.parse_expr()
-        return Return(value)
+        return Return(
+            value=value,
+            line=return_token.line,
+            column=return_token.column
+        )
     
     def parse_block(self):
+        block_token = self.current_token
+        
         if self.current_token.type != TokenType.LBRACE:
             raise ParseError(
                 message="Expected '{' to start block",
@@ -449,7 +563,11 @@ class Parser():
             )
         self.advance() # eat '}'
         
-        return Block(body)
+        return Block(
+            statements=body,
+            line=block_token.line,
+            column=block_token.column
+        )
     
     def token_to_op(self, token):
         mapping = {

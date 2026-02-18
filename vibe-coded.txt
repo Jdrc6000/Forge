@@ -27,7 +27,7 @@ fn check(a) {
         return "idk what a is"
     }
 }
-print(check(4))
+print(check(2))
 """
 num_regs = 1024
 start = time()
@@ -60,7 +60,6 @@ try:
     print(f"took {time() - start} secs")
     print(f"took {time() - start_vm} secs to run vm")
 except CompileError as e:
-    print(e)
     print(format_diagnostic(
         source=code,
         filename="<string>",
@@ -68,6 +67,16 @@ except CompileError as e:
         column=e.column or 1,
         message=e.message,
         level=e.level,
+        highlight_length=1
+    ))
+    exit(1)
+except RuntimeError as e:
+    print(format_diagnostic(
+        source=code,
+        filename="<string>",
+        line=e.line or 1,
+        column=e.column or 1,
+        message=e.message,
         highlight_length=1
     ))
     exit(1)
@@ -100,15 +109,15 @@ def format_diagnostic(
     snippet = bad_line[start:end]
     caret_pos = (column - 1) - start
     color = {
-        "error":   "\033[91m",
+        "error": "\033[91m",
         "warning": "\033[93m",
-        "note":    "\033[94m",
+        "note": "\033[94m",
     }.get(level, "")
     reset = "\033[0m"
     return (
         f"{filename}:{line}:{column}: {color}{level}:{reset} {message}\n"
         f"   {line:3} │ {snippet}\n"
-        f"      │ {' ' * caret_pos}{'^' * highlight_length}\n"
+        f"       │ {' ' * caret_pos}{'^' * highlight_length}\n"
     )
 @dataclass
 class CompileError(Exception):
@@ -126,78 +135,130 @@ class CompileError(Exception):
         if self.line is not None:
             loc = f"[{self.line}:{self.column or "?"}] "
         return f"{self.level.upper()} {loc}{self.message}"
+@dataclass
+class RuntimeError(Exception):
+    message: str
+    ip: Optional[int] = None
+    instruction: Optional[str] = None
+    line: Optional[int] = None
+    column: Optional[int] = None
+    def __str__(self) -> str:
+        loc = ""
+        if self.ip is not None:
+            loc = f" at ip={self.ip}"
+        if self.line is not None:
+            loc += f" (source:{self.line}:{self.column or "?"})"
+        return f"RUNTIME ERROR{loc}: {self.message}"
 class LexerError(CompileError): pass
 class ParseError(CompileError): pass
 class SemanticError(CompileError): pass
-class TypeCheckError(CompileError): pass
+class TypeError(CompileError): pass
 class UndefinedVariableError(SemanticError): pass
 class UnreachableCodeWarning(CompileError): pass
+class DivisionByZeroError(RuntimeError): pass
+class TypeMismatchError(RuntimeError): pass
+class IndexOutOfBoundsError(RuntimeError): pass
+class InvalidArgumentError(RuntimeError): pass
+class StackUnderflowError(RuntimeError): pass
+class UnknownOpcodeError(RuntimeError): pass
+class LabelNotFoundError(RuntimeError): pass
 
 --- src/frontend/ast_nodes.py ---
 from dataclasses import dataclass, field
 from typing import List, Optional, Any, Union, Tuple
-class AST():
+@dataclass
+class AST:
     inferred_type = None
 @dataclass
-class Module():
+class Module(AST):
     body: List[AST]
+    line: int = 0
+    column: int = 0
 @dataclass
 class Call(AST):
     func: AST
     args: List[AST]
+    line: int = 0
+    column: int = 0
 @dataclass
 class Assign(AST):
     target: AST
     value: AST
+    line: int = 0
+    column: int = 0
 @dataclass
 class Expr(AST):
     value: AST
+    line: int = 0
+    column: int = 0
 @dataclass
 class Name(AST):
     id: str
+    line: int = 0
+    column: int = 0
 @dataclass
 class Constant(AST):
     value: Any
+    line: int = 0
+    column: int = 0
 @dataclass
 class BinOp(AST):
     left: AST
     op: str
     right: AST
+    line: int = 0
+    column: int = 0
 @dataclass
 class UnOp(AST):
     op: str
     operand: AST
+    line: int = 0
+    column: int = 0
 @dataclass
 class If(AST):
     test: AST
     body: Block
     orelse: Optional[Union[Block, "If"]] = None
+    line: int = 0
+    column: int = 0
 @dataclass
 class Compare(AST):
     left: AST
     ops: list[str]
     comparators: List[AST]
+    line: int = 0
+    column: int = 0
 @dataclass
 class FunctionDef(AST):
     name: str
     args: list[str]
     body: list[AST]
+    line: int = 0
+    column: int = 0
 @dataclass
 class Return(AST):
     value: Optional[AST] = None
+    line: int = 0
+    column: int = 0
 @dataclass
 class While(AST):
     test: AST
     body: list[AST]
+    line: int = 0
+    column: int = 0
 @dataclass
 class For(AST):
     target: Name
     start: AST
     end: AST
     body: list[AST]
+    line: int = 0
+    column: int = 0
 @dataclass
 class Block(AST):
     statements: List[AST]
+    line: int = 0
+    column: int = 0
     def __iter__(self):
         return iter(self.statements)
 
@@ -391,7 +452,15 @@ class Parser():
             elif self.peek() and self.peek().type == TokenType.EQ:
                 return self.parse_assign()
             else:
-                return Expr(Name(self.current_token.value))
+                return Expr(
+                    value=Name(
+                        id=self.current_token.value,
+                        line=self.current_token.line,
+                        column=self.current_token.column
+                    ),
+                    line=self.current_token.line,
+                    column=self.current_token.column
+                )
         elif self.current_token.type == TokenType.FN:
             return self.parse_function()
         elif self.current_token.type == TokenType.WHILE:
@@ -401,18 +470,27 @@ class Parser():
         elif self.current_token.type == TokenType.RETURN:
             return self.parse_return()
         else:
-            return Expr(self.parse_expr())
+            return Expr(
+                value=self.parse_expr(),
+                line=self.current_token.line,
+                column=self.current_token.column
+            )
     def parse_primary(self):
         tok = self.current_token
-        if tok.type in (TokenType.INT, TokenType.FLOAT):
+        if tok.type in (TokenType.INT, TokenType.FLOAT, TokenType.STRING):
             self.advance()
-            return Constant(tok.value)
-        elif tok.type == TokenType.STRING:
-            self.advance()
-            return Constant(tok.value)
+            return Constant(
+                value=tok.value,
+                line=tok.line,
+                column=tok.column
+            )
         elif tok.type == TokenType.NAME:
             self.advance()
-            node = Name(tok.value)
+            node = Name(
+                id=tok.value,
+                line=tok.line,
+                column=tok.column
+            )
             if self.current_token.type == TokenType.LPAREN:
                 self.advance()
                 args = []
@@ -430,7 +508,12 @@ class Parser():
                                 column=self.current_token.column
                             )
                 self.advance()
-                return Call(node, args)
+                return Call(
+                    func=node,
+                    args=args,
+                    line=self.current_token.line,
+                    column=self.current_token.column
+                )
             return node
         elif tok.type == TokenType.LPAREN:
             self.advance()
@@ -448,10 +531,18 @@ class Parser():
             return expr
         elif tok.type == TokenType.TRUE:
             self.advance()
-            return Constant(True)
+            return Constant(
+                value=True,
+                line=tok.line,
+                column=tok.column
+            )
         elif tok.type == TokenType.FALSE:
             self.advance()
-            return Constant(False)
+            return Constant(
+                value=False,
+                line=tok.line,
+                column=tok.column
+            )
         else:
             raise ParseError(
                 message=f"Unexpected token: {tok}",
@@ -477,8 +568,14 @@ class Parser():
             )
         self.advance()
         return Call(
-            func=Name("print"),
-            args=[expr_node]
+            func=Name(
+                id="print",
+                line=print_token.line,
+                column=print_token.column
+            ),
+            args=[expr_node],
+            line=print_token.line,
+            column=print_token.column
         )
     def parse_assign(self):
         name_token = self.current_token
@@ -492,10 +589,17 @@ class Parser():
         self.advance()
         value_node = self.parse_expr()
         return Assign(
-            target=Name(name_token.value),
-            value=value_node
+            target=Name(
+                id=name_token.value,
+                line=name_token.line,
+                column=name_token.column
+            ),
+            value=value_node,
+            line=name_token.line,
+            column=name_token.column
         )
     def parse_comparison(self):
+        comparision_token = self.current_token
         left = self.parse_binop()
         ops = []
         comparators = []
@@ -515,21 +619,39 @@ class Parser():
             self.advance()
             comparators.append(self.parse_binop())
         if ops:
-            return Compare(left, ops, comparators)
+            return Compare(
+                left=left,
+                ops=ops,
+                comparators=comparators,
+                line=comparision_token.line,
+                column=comparision_token.column
+            )
         return left
     def parse_logic_or(self):
         left = self.parse_logic_and()
         while self.current_token.type == TokenType.OR:
             self.advance()
             right = self.parse_logic_and()
-            left = BinOp(left, "or", right)
+            left = BinOp(
+                left=left,
+                ops="or",
+                right=right,
+                line=self.current_token.line,
+                column=self.current_token.column
+            )
         return left
     def parse_logic_and(self):
         left = self.parse_comparison()
         while self.current_token.type == TokenType.AND:
             self.advance()
             right = self.parse_comparison()
-            left = BinOp(left, "and", right)
+            left = BinOp(
+                left=left,
+                ops="and",
+                right=right,
+                line=self.current_token.line,
+                column=self.current_token.column
+            )
         return left
     def parse_expr(self):
         return self.parse_logic_or()
@@ -548,8 +670,10 @@ class Parser():
                 right = self.parse_binop(prec+1)
                 left = BinOp(
                     left=left,
-                    op=self.token_to_op(op_token),
-                    right=right
+                    ops=self.token_to_op(op_token),
+                    right=right,
+                    line=self.current_token.line,
+                    column=self.current_token.column
                 )
             else:
                 break
@@ -561,7 +685,12 @@ class Parser():
             return UnOp(op=self.token_to_op(tok), operand=self.parse_unary())
         elif tok.type == TokenType.NOT:
             self.advance()
-            return UnOp(op="not", operand=self.parse_unary())
+            return UnOp(
+                ops="not",
+                operand=self.parse_unary(),
+                line=tok.line,
+                column=tok.column
+            )
         else:
             return self.parse_primary()
     def parse_function(self):
@@ -605,8 +734,15 @@ class Parser():
                     )
         self.advance()
         body = self.parse_block()
-        return FunctionDef(func_name, args, body)
+        return FunctionDef(
+            name=func_name,
+            args=args,
+            body=body,
+            line=function_token.line,
+            column=function_token.column
+        )
     def parse_if(self):
+        if_token = self.current_token
         self.advance()
         test = self.parse_expr()
         body = self.parse_block()
@@ -623,14 +759,26 @@ class Parser():
                         column=self.current_token.column
                     )
                 orelse = self.parse_block()
-        return If(test, body, orelse)
+        return If(
+            test=test,
+            body=body,
+            orelse=orelse,
+            line=if_token.line,
+            column=if_token.column
+        )
     def parse_while(self):
+        while_token = self.current_token
         self.advance()
         test = self.parse_expr()
         body = self.parse_block()
-        return While(test, body)
+        return While(
+            test=test,
+            body=body,
+            line=while_token.line,
+            column=while_token.column
+        )
     def parse_call(self):
-        func_name = self.current_token.value
+        func_token = self.current_token
         self.advance()
         if self.current_token.type != TokenType.LPAREN:
             raise ParseError(
@@ -654,8 +802,18 @@ class Parser():
                         column=self.current_token.column
                     )
         self.advance()
-        return Call(Name(func_name), args)
+        return Call(
+            func=Name(
+                id=func_token.value,
+                line=func_token.line,
+                column=func_token.column
+            ),
+            args=args,
+            line=func_token.line,
+            column=func_token.column
+        )
     def parse_for(self):
+        for_token = self.current_token
         self.advance()
         if self.current_token.type != TokenType.NAME:
             raise ParseError(
@@ -663,7 +821,11 @@ class Parser():
                 line=self.current_token.line,
                 column=self.current_token.column
             )
-        loop_var = Name(self.current_token.value)
+        loop_var = Name(
+            id=self.current_token.value,
+            line=self.current_token.line,
+            column=self.current_token.column
+        )
         self.advance()
         if self.current_token.type != TokenType.IN:
             raise ParseError(
@@ -682,12 +844,25 @@ class Parser():
         self.advance()
         end = self.parse_expr()
         body = self.parse_block()
-        return For(loop_var, start, end, body)
+        return For(
+            target=loop_var,
+            start=start,
+            end=end,
+            body=body,
+            line=for_token.line,
+            column=for_token.column
+        )
     def parse_return(self):
+        return_token = self.current_token
         self.advance()
         value = self.parse_expr()
-        return Return(value)
+        return Return(
+            value=value,
+            line=return_token.line,
+            column=return_token.column
+        )
     def parse_block(self):
+        block_token = self.current_token
         if self.current_token.type != TokenType.LBRACE:
             raise ParseError(
                 message="Expected '{' to start block",
@@ -707,7 +882,11 @@ class Parser():
                 column=self.current_token.column
             )
         self.advance()
-        return Block(body)
+        return Block(
+            statements=body,
+            line=block_token.line,
+            column=block_token.column
+        )
     def token_to_op(self, token):
         mapping = {
             TokenType.PLUS: "+",
@@ -1363,7 +1542,8 @@ def linear_scan_allocate(code, num_regs):
     return new_code
 
 --- src/runtime/vm.py ---
-from src.frontend.token_types  import *
+from src.frontend.token_types import *
+from src.exceptions import *
 class VM:
     def __init__(self, num_regs):
         self.num_regs = num_regs
@@ -1386,8 +1566,12 @@ class VM:
         for i, instr in enumerate(self.code):
             if instr.op == "LABEL" and instr.a == label_name:
                 return i
-        raise RuntimeError(f"Label not found: {label_name}")
+        raise LabelNotFoundError(
+            message=f"Label not found: {label_name}",
+            ip=self.ip
+        )
     def run(self, code):
+        self.code = code
         while self.ip < len(code):
             instr = code[self.ip]
             op, a, b, c = instr.op, instr.a, instr.b, instr.c
@@ -1470,7 +1654,11 @@ class VM:
             elif op == "AND":
                 self.regs[a.id] = self.regs[b.id] and self.regs[c.id]
             else:
-                raise RuntimeError(f"Unknown opcode {op}")
+                raise UnknownOpcodeError(
+                    message=f"Unknown opcode {op}",
+                    ip=self.ip,
+                    instruction=f"{op} {instr.a} {instr.b} {instr.c}"
+                )
             self.ip += 1
 
 --- src/semantic/analyser.py ---
@@ -1487,8 +1675,29 @@ class Analyser():
             for stmt in node.body:
                 self.analyse(stmt)
         elif isinstance(node, Call):
-            if node.func.id != "print" and not self.symbols.exists(node.func.id):
-                raise UndefinedVariableError(f"Undefined function '{node.func.id}'")
+            if node.func.id == "print":
+                for arg in node.args:
+                    self.analyse(arg)
+                return None
+            func_name = node.func.id
+            if not self.symbols.exists(func_name):
+                raise UndefinedVariableError(
+                    message=f"Undefined function '{func_name}'",
+                    token=node.func
+                )
+            sym = self.symbols.get(func_name)
+            if sym["type"] != "function":
+                raise TypeError(
+                    message=f"'{func_name}' is not a function",
+                    token=node.func
+                )
+            expected = sym.get("param_count")
+            actual = len(node.args)
+            if expected is not None and actual != expected:
+                raise TypeError(
+                    message=f"Function '{func_name}' expected {expected} argument(s), but {len(node.args)} given",
+                    token=node
+                )
             for arg in node.args:
                 self.analyse(arg)
             return None
@@ -1499,7 +1708,10 @@ class Analyser():
             self.symbols.define(node.target.id, value_type)
         elif isinstance(node, Name):
             if not self.symbols.exists(node.id):
-                raise Exception(f"Undefined variable '{node.id}'")
+                raise UndefinedVariableError(
+                    message=f"Undefined variable '{node.id}'",
+                    token=node
+                )
             return self.symbols.get(node.id)["type"]
         elif isinstance(node, Constant):
             value = node.value
@@ -1522,13 +1734,19 @@ class Analyser():
                 right = left
                 node.right.inferred_type = left
             if not left.supports_binary(node.op, right):
-                raise TypeError(f"Operator '{node.op}' not supported between {left} and {right}")
+                raise TypeError(
+                    message=f"Operator '{node.op}' not supported between {left} and {right}",
+                    token=node
+                )
             node.inferred_type = left
             return left
         elif isinstance(node, If):
             test_type = self.analyse(node.test)
             if test_type not in (BOOL, UNKNOWN) and test_type is not None:
-                raise TypeError("If condition must be boolean")
+                raise TypeError(
+                    message="If condition must be boolean",
+                    token=node
+                )
             for stmt in node.body:
                 self.analyse(stmt)
             if node.orelse:
@@ -1538,11 +1756,18 @@ class Analyser():
             left = self.analyse(node.left)
             right = self.analyse(node.comparators[0])
             if not left.is_compatible(right):
-                raise TypeError(f"Cannot compare {left} with {right}")
+                raise TypeError(
+                    message=f"Cannot compare {left} with {right}",
+                    token=node
+                )
             node.inferred_type = BOOL
             return BOOL
         elif isinstance(node, FunctionDef):
-            self.symbols.define(node.name, "function")
+            self.symbols.define(node.name, {
+                "type": "function",
+                "param_count": len(node.args),
+                "params": node.args
+            })
             self.symbols.enter_scope()
             old_fn = self.current_function
             self.current_function = node
@@ -1554,7 +1779,10 @@ class Analyser():
             self.symbols.exit_scope()
         elif isinstance(node, Return):
             if self.current_function is None:
-                raise Exception("Return outside function")
+                raise SemanticError(
+                    message="Return outside function",
+                    token= node
+                )
             if node.value:
                 return_type = self.analyse(node.value)
             else:
@@ -1563,14 +1791,20 @@ class Analyser():
         elif isinstance(node, While):
             test_type = self.analyse(node.test)
             if test_type not in (BOOL, UNKNOWN) and test_type is not None:
-                raise TypeError("While condition must be boolean")
+                raise TypeError(
+                    message="While condition must be boolean",
+                    token=node
+                )
             for stmt in node.body:
                 self.analyse(stmt)
         elif isinstance(node, For):
             start_type = self.analyse(node.start)
             end_type = self.analyse(node.end)
             if start_type != NUMBER or end_type != NUMBER:
-                raise TypeError("For loop start and end must be numbers")
+                raise TypeError(
+                    message="For loop start and end must be numbers",
+                    token=node
+                )
             self.symbols.define(node.target.id, NUMBER)
             for stmt in node.body:
                 self.analyse(stmt)
@@ -1582,7 +1816,10 @@ class SymbolTable():
     def __init__(self):
         self.scopes = [{}]
     def define(self, name, _type):
-        self.scopes[-1][name] = {"type": _type}
+        if isinstance(_type, dict):
+            self.scopes[-1][name] = _type
+        else:
+            self.scopes[-1][name] = {"type": _type}
     def exists(self, name):
         return any(name in scope for scope in self.scopes)
     def get(self, name):
