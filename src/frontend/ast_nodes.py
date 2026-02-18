@@ -12,6 +12,15 @@ class Module(AST):
     column: int = 0
 
 @dataclass
+class Block(AST):
+    statements: List[AST]
+    line: int = 0
+    column: int = 0
+    
+    def __iter__(self):
+        return iter(self.statements)
+
+@dataclass
 class Call(AST):
     func: AST
     args: List[AST]
@@ -105,10 +114,16 @@ class For(AST):
     column: int = 0
 
 @dataclass
-class Block(AST):
-    statements: List[AST]
+class Attribute(AST):
+    obj: AST
+    attr: str
     line: int = 0
     column: int = 0
-    
-    def __iter__(self):
-        return iter(self.statements)
+
+@dataclass
+class MethodCall(AST):
+    obj: AST
+    method: str
+    args: List[AST]
+    line: int = 0
+    column: int = 0

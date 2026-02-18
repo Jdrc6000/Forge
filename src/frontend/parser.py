@@ -7,7 +7,7 @@ class Parser():
     def __init__(self, tokens):
         self.tokens = tokens
         self.pos = 0
-        self.current_token = self.tokens[self.pos]
+        self.current_token = self.tokens[self.pos] 
     
     def advance(self):
         self.pos += 1
@@ -23,6 +23,30 @@ class Parser():
         return None
     
     # here lay our beloved skip_newlines function before we migrated to brace delimited blocks...
+    
+    # an awesome helper function that parses an arg list that i totally wrote myself
+    def _parse_arg_list(self):
+        args = []
+        
+        if self.current_token.type != TokenType.RPAREN:
+            while True:
+                args.append(self.parse_expr())
+                
+                if self.current_token.type == TokenType.COMMA:
+                    self.advance()
+                
+                elif self.current_token.type == TokenType.RPAREN:
+                    break
+                
+                else:
+                    raise ParseError(
+                        message="Expected ',' or ')' in argument list",
+                        line=self.current_token.line,
+                        column=self.current_token.column
+                    )
+        
+        self.advance()  # consume ')'
+        return args
     
     def parse(self):
         body = []
@@ -83,7 +107,7 @@ class Parser():
         
         if tok.type in (TokenType.INT, TokenType.FLOAT, TokenType.STRING):
             self.advance()
-            return Constant(
+            node = Constant(
                 value=tok.value,
                 line=tok.line,
                 column=tok.column
@@ -99,39 +123,21 @@ class Parser():
 
             # handle call syntax
             if self.current_token.type == TokenType.LPAREN:
-                self.advance()  # skip '('
-                args = []
-
-                if self.current_token.type != TokenType.RPAREN:
-                    while True:
-                        args.append(self.parse_expr())
-                        if self.current_token.type == TokenType.COMMA:
-                            self.advance()
-                        elif self.current_token.type == TokenType.RPAREN:
-                            break
-                        else:
-                            raise ParseError(
-                                message=f"Expected ',' or ')' in argument list",
-                                line=self.current_token.line,
-                                column=self.current_token.column
-                            )
-
-                self.advance()  # skip ')'
-                return Call(
+                self.advance()
+                args = self._parse_arg_list() # our hero in action
+                node = Call(
                     func=node,
                     args=args,
-                    line=self.current_token.line,
-                    column=self.current_token.column
+                    line=tok.line,
+                    column=tok.column
                 )
-
-            return node
 
         elif tok.type == TokenType.LPAREN:
             self.advance()
             if self.current_token.type == TokenType.RPAREN:
-                expr = Constant(None)
+                node = Constant(None)
             else:
-                expr = self.parse_expr()
+                node = self.parse_expr()
             
             if self.current_token.type != TokenType.RPAREN:
                 raise ParseError(
@@ -141,11 +147,10 @@ class Parser():
                 )
             
             self.advance()
-            return expr
         
         elif tok.type == TokenType.TRUE:
             self.advance()
-            return Constant(
+            node = Constant(
                 value=True,
                 line=tok.line,
                 column=tok.column
@@ -153,7 +158,7 @@ class Parser():
 
         elif tok.type == TokenType.FALSE:
             self.advance()
-            return Constant(
+            node = Constant(
                 value=False,
                 line=tok.line,
                 column=tok.column
@@ -165,38 +170,43 @@ class Parser():
                 line=self.current_token.line,
                 column=self.current_token.column
             )
-    
-    def parse_print(self):
-        print_token = self.current_token
-        self.advance()
-        if self.current_token.type != TokenType.LPAREN:
-            raise ParseError(
-                message=f"Expected '(' after print",
-                line=print_token.line,
-                column=print_token.column
-            )
-        self.advance()
         
-        expr_node = self.parse_expr()
+        # runs after primary, consumes .name + .name()
+        while self.current_token.type == TokenType.DOT:
+            dot_line = self.current_token.line
+            dot_col = self.current_token.column
+            self.advance()
+            
+            if self.current_token.type != TokenType.NAME:
+                raise ParseError(
+                    message="Expected attribute or method name after '.'",
+                    line=self.current_token.line,
+                    column=self.current_token.column
+                )
+            
+            attr_tok = self.current_token
+            self.advance() # eat the name
+            
+            if self.current_token.type == TokenType.LPAREN:
+                self.advance() # eat '('
+                args = self._parse_arg_list()
+                node = MethodCall(
+                    obj=node,
+                    method=attr_tok.value,
+                    args=args,
+                    line=dot_line,
+                    column=dot_col
+                )
+            
+            else:
+                node = Attribute(
+                    obj=node,
+                    attr=attr_tok.value,
+                    line=dot_line,
+                    column=dot_col
+                )
         
-        if self.current_token.type != TokenType.RPAREN:
-            raise ParseError(
-                message=f"Expected ')' after print arguments",
-                line=print_token.line,
-                column=print_token.column
-            )
-        self.advance()
-        
-        return Call(
-            func=Name(
-                id="print", # because it makes the interpreter happy
-                line=print_token.line,
-                column=print_token.column
-            ),
-            args=[expr_node],
-            line=print_token.line,
-            column=print_token.column
-        )
+        return node
     
     def parse_assign(self):
         name_token = self.current_token
@@ -248,7 +258,7 @@ class Parser():
         if ops:
             return Compare(
                 left=left,
-                ops=ops,
+                op=ops,
                 comparators=comparators,
                 line=comparision_token.line,
                 column=comparision_token.column
@@ -263,7 +273,7 @@ class Parser():
             right = self.parse_logic_and()
             left = BinOp(
                 left=left,
-                ops="or",
+                op="or",
                 right=right,
                 line=self.current_token.line,
                 column=self.current_token.column
@@ -279,7 +289,7 @@ class Parser():
             right = self.parse_comparison()
             left = BinOp(
                 left=left,
-                ops="and",
+                op="and",
                 right=right,
                 line=self.current_token.line,
                 column=self.current_token.column
@@ -311,7 +321,7 @@ class Parser():
                 right = self.parse_binop(prec+1)
                 left = BinOp(
                     left=left,
-                    ops=self.token_to_op(op_token),
+                    op=self.token_to_op(op_token),
                     right=right,
                     line=self.current_token.line,
                     column=self.current_token.column
@@ -332,7 +342,7 @@ class Parser():
         elif tok.type == TokenType.NOT:
             self.advance()
             return UnOp(
-                ops="not",
+                op="not",
                 operand=self.parse_unary(),
                 line=tok.line,
                 column=tok.column
@@ -686,6 +696,11 @@ class Parser():
             print(f"{pad}Block")
             for stmt in node:
                 self.dump(stmt, indent + 1)
+        
+        elif isinstance(node, Return):
+            print(f"{pad}Return")
+            if node.value:
+                self.dump(node.value, indent + 1)
         
         else:
             print(f"{pad}{node}")

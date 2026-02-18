@@ -1,6 +1,7 @@
 from src.frontend.token_types import *
 from src.exceptions import *
 from .builtins_registry import BUILTINS
+from .methods import resolve_member
 
 # past-josh: PLEASE FOR THE LOVE OF GOD REFACTOR TO REGISTER-BASED!!
 # future-josh: your wish is my command
@@ -56,8 +57,43 @@ class VM:
             elif op == "STORE_VAR":
                 self.vars[a] = self.regs[b.id]
             
-            elif op == "PRINT":
-                print(self.regs[a.id])
+            elif op == "GET_ATTR":
+                obj = self.regs[b.id]
+                attr_name = c
+                
+                try:
+                    handler = resolve_member(obj, attr_name)
+                    self.regs[a.id] = handler(obj, [])
+                
+                except AttributeError as e:
+                    raise RuntimeError(
+                        message=str(e),
+                        ip=self.ip
+                    )
+            
+            elif op == "CALL_METHOD":
+                
+                obj = self.regs[b.id]
+                method_name = c
+                arg_regs = getattr(instr, "arg_regs", [])
+                args = [self.regs[r.id] for r in arg_regs]
+                
+                try:
+                    handler = resolve_member(obj, method_name)
+                    result = handler(obj, args)
+                    self.regs[a.id] = result
+                
+                except AttributeError as e:
+                    raise RuntimeError(
+                        message=str(e),
+                        ip=self.ip
+                    )
+                
+                except (TypeError, NotImplementedError) as e:
+                    raise RuntimeError(
+                        message=str(e),
+                        ip=self.ip
+                    )
             
             elif op == "CALL":
                 func_name = instr.a
@@ -135,10 +171,10 @@ class VM:
             
             # spilling
             elif op == "SPILL_STORE":
-                self.stack[a] = self.regs[b]
+                self.stack[a] = self.regs[b.id]
 
             elif op == "SPILL_LOAD":
-                self.regs[a] = self.stack[b] # im conflicted... is it a then b, or b then a??
+                self.regs[a.id] = self.stack[b] # im conflicted... is it a then b, or b then a??
             
             # arithmetic
             elif op == "ADD":

@@ -58,7 +58,18 @@ class Analyser():
             
             return None
         
+        elif isinstance(node, Attribute):
+            self.analyse(node.obj)
+            return UNKNOWN
+        
+        elif isinstance(node, MethodCall):
+            self.analyse(node.obj)
+            for arg in node.args:
+                self.analyse(arg)
+            return UNKNOWN
+        
         # unused?
+        # no past-josh... if an expression node occurs, it passes straight through...
         elif isinstance(node, Expr):
             self.analyse(node.value)
         

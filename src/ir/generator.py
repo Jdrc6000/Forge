@@ -68,6 +68,22 @@ class IRGenerator:
             
             return dest
     
+    def gen_Attribute(self, node):
+        obj_reg = self.generate(node.obj)
+        dest = self.ir.new_reg()
+        instr = Instr("GET_ATTR", dest, obj_reg, node.attr)
+        self.ir.code.append(instr)
+        return dest
+    
+    def gen_MethodCall(self, node):
+        obj_reg = self.generate(node.obj)
+        arg_regs = [self.generate(a) for a in node.args]
+        dest = self.ir.new_reg()
+        instr = Instr("CALL_METHOD", dest, obj_reg, node.method)
+        instr.arg_regs = arg_regs
+        self.ir.code.append(instr)
+        return dest
+    
     # uses backpatching
     def gen_If(self, node):
         test = self.generate(node.test)

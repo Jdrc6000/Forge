@@ -49,6 +49,20 @@ def get_defs_uses(instr):
         defs = [instr.c] if instr.c else []
         uses = instr.arg_regs if hasattr(instr, 'arg_regs') else []
         return defs, uses
+    
+    elif instr.op == "CALL_BUILTIN":
+        defs = [instr.c] if instr.c else []
+        uses = instr.b if isinstance(instr.b, list) else ([instr.b] if instr.b else [])
+        return defs, uses
+
+    elif instr.op == "GET_ATTR":
+        # a = dest, b = obj_reg, c = attr_name (str)
+        return [instr.a], [instr.b]
+    
+    elif instr.op == "CALL_METHOD":
+        # a = dest, b = obj_reg, c = method_name (str)
+        uses = [instr.b] + (instr.arg_regs if hasattr(instr, "arg_regs") else [])
+        return [instr.a], uses
 
     elif instr.op == "RETURN":
         return [], [instr.a] if instr.a else []
@@ -142,13 +156,30 @@ def linear_scan_allocate(code, num_regs):
             lr = range_map[u]
             if lr.slot is not None:
                 new_code.append(Instr("SPILL_LOAD", lr.phys, lr.slot))
-
-        new_instr = Instr(
-            instr.op,
-            rewrite_operand(instr.a),
-            rewrite_operand(instr.b),
-            rewrite_operand(instr.c)
-        )
+        
+        if instr.op == "CALL_BUILTIN":
+            new_instr = Instr(
+                instr.op,
+                rewrite_operand(instr.a),
+                [rewrite_operand(r) for r in instr.b] if isinstance(instr.b, list) else rewrite_operand(instr.b),
+                rewrite_operand(instr.c)
+            )
+        
+        elif instr.op in ("GET_ATTR", "CALL_METHOD"):
+            new_instr = Instr(
+                instr.op,
+                rewrite_operand(instr.a),
+                rewrite_operand(instr.b),
+                instr.c # REFRAIN FROM REWRITING AT ALL TIMES, DOING SO WILL DISTRUPT THE COSMIC ENERGY OF THE UNIVERSE AND OBLITERATE EVERYTHING (only cuz its the attr/method name)
+            )
+        
+        else:
+            new_instr = Instr(
+                instr.op,
+                rewrite_operand(instr.a),
+                rewrite_operand(instr.b),
+                rewrite_operand(instr.c)
+            )
         
         # Carry over CALL/LABEL metadata, rewriting virtual regs in arg_regs
         if hasattr(instr, 'arg_regs'):

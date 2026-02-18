@@ -31,7 +31,7 @@ def builtin_len(vm: VM, args: list):
     return len(args[0])
 
 BUILTINS: Dict[str, Builtin] = {
-    "print":   Builtin("print",   builtin_print,   min_args=0, max_args=999),
+    "print": Builtin("print",   builtin_print,   min_args=0, max_args=999),
     "println": Builtin("println", builtin_println, min_args=0, max_args=999),
-    "len":     Builtin("len",     builtin_len,     min_args=1, max_args=1),
+    "len": Builtin("len",     builtin_len,     min_args=1, max_args=1), # consider removing since dot notation function ".len()" exists
 }

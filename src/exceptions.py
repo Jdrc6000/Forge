@@ -58,7 +58,7 @@ class CompileError(Exception):
     def __str__(self) -> str:
         loc = ""
         if self.line is not None:
-            loc = f"[{self.line}:{self.column or "?"}] "
+            loc = f"[{self.line}:{self.column or '?'}] "
         return f"{self.level.upper()} {loc}{self.message}"
 
 @dataclass
@@ -75,7 +75,7 @@ class RuntimeError(Exception):
             loc = f" at ip={self.ip}"
         
         if self.line is not None:
-            loc += f" (source:{self.line}:{self.column or "?"})"
+            loc += f" (source:{self.line}:{self.column or '?'})"
         
         return f"RUNTIME ERROR{loc}: {self.message}"
 

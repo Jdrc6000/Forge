@@ -33,7 +33,7 @@ fn check(a) {
     if a == 1 {
         return "a is 1"
     } else if a == 2 {
-        return "a is 2"
+        return "a Is 2"
     } else if a == 3 {
         return "a is 3"
     } else {
@@ -41,8 +41,8 @@ fn check(a) {
     }
 }
 
-result = check(2, 5)
-println(result, len(result))
+result = check(2)
+println(result.upper())
 """
 num_regs = 1024
 start = time()
