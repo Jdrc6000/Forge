@@ -1,12 +1,14 @@
 from src.semantic.types import *
 from src.frontend.ast_nodes import *
 from src.semantic.symbol_table import *
+from src.exceptions import *
 
 # message for future-josh
 #  this is going to be the most confusing, awful, horrid-looking code you have ever seen,
 #  so dont even bother trying to debug this pile of horse-doodoo
 
 # future-josh here, i have to debug this now...
+# future-future-josh here, its currently 1:37am, and i am refactoring 2085 lines of goddamn code
 
 class Analyser():
     def __init__(self, symbols):
@@ -19,6 +21,8 @@ class Analyser():
                 self.analyse(stmt)
         
         elif isinstance(node, Call):
+            if node.func.id != "print" and not self.symbols.exists(node.func.id):
+                raise UndefinedVariableError(f"Undefined function '{node.func.id}'")
             for arg in node.args:
                 self.analyse(arg)
             
@@ -74,7 +78,7 @@ class Analyser():
         
         elif isinstance(node, If):
             test_type = self.analyse(node.test)
-            if test_type != BOOL:
+            if test_type not in (BOOL, UNKNOWN) and test_type is not None:
                 raise TypeError("If condition must be boolean")
 
             for stmt in node.body:
@@ -124,7 +128,7 @@ class Analyser():
         
         elif isinstance(node, While):
             test_type = self.analyse(node.test)
-            if test_type != BOOL:
+            if test_type not in (BOOL, UNKNOWN) and test_type is not None:
                 raise TypeError("While condition must be boolean")
             for stmt in node.body:
                 self.analyse(stmt)

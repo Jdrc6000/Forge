@@ -79,7 +79,10 @@ class IRGenerator:
 
             self.ir.code[jmp_false].b = len(self.ir.code)
 
-            for stmt in node.orelse:
+            orelse = node.orelse
+            if isinstance(orelse, (If, Block)):
+                orelse = [orelse]
+            for stmt in orelse:
                 self.generate(stmt)
 
             self.ir.code[jmp_end].a = len(self.ir.code)
@@ -118,8 +121,7 @@ class IRGenerator:
         left = self.generate(node.left)
         right = self.generate(node.right)
 
-        # reuse left register as destination
-        dest = left
+        dest = self.ir.new_reg()
         self.ir.emit(BINOPS[node.op], dest, left, right)
         return dest
     
@@ -168,7 +170,8 @@ class IRGenerator:
         instr.param_names = node.args
         self.ir.code.append(instr)
         
-        for stmt in node.body.statements:
+        stmts = node.body.statements if isinstance(node.body, Block) else node.body
+        for stmt in stmts:
             self.generate(stmt)
         
         default_reg = self.ir.new_reg()

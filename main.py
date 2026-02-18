@@ -19,7 +19,19 @@ def fmt(x):
     return x
 
 code = """
-a = 
+fn check(a) {
+    if a == 1 {
+        return "a is 1"
+    } else if a == 2 {
+        return "a is 2"
+    } else if a == 3 {
+        return "a is 3"
+    } else {
+        return "idk what a is"
+    }
+}
+
+print(check(4))
 """
 num_regs = 1024
 start = time()
@@ -50,6 +62,8 @@ try:
     for i, instr in enumerate(allocated):
         print(f"realloc{i} {instr.op} {fmt(instr.a)} {fmt(instr.b)} {fmt(instr.c)}") #:04 to pad to 4 0's
 
+    start_vm = time()
+
     vm = VM(num_regs=num_regs)
     vm.code = allocated
     start_ip = vm.find_label("__main__")
@@ -58,6 +72,7 @@ try:
     vm.dump_regs()
     
     print(f"took {time() - start} secs")
+    print(f"took {time() - start_vm} secs to run vm")
 
 except CompileError as e:
     print(e)
@@ -72,9 +87,11 @@ except CompileError as e:
     ))
     exit(1)
 
+except IndexError as e:
+    raise RuntimeError(f"number of regs prolly too low: {e}") from e
+
 except Exception as e:
-    print(f"random error that shouldnt of appeared appeared: {e}")
-    raise
+    raise RuntimeError(f"couldnt even begin to tell you where this came from: {e}") from e
 
 
 # timeline for additions:

@@ -33,8 +33,6 @@ class VM:
         raise RuntimeError(f"Label not found: {label_name}")
     
     def run(self, code):
-        self.ip = 0
-        
         while self.ip < len(code):
             instr = code[self.ip]
             op, a, b, c = instr.op, instr.a, instr.b, instr.c

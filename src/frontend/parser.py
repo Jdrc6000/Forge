@@ -39,7 +39,7 @@ class Parser():
             return self.parse_print()
         
         elif self.current_token.type == TokenType.LBRACE:
-            return Block(self.parse_block())
+            return self.parse_block()
         
         elif self.current_token.type == TokenType.IF:
             return self.parse_if()
@@ -275,19 +275,20 @@ class Parser():
             return self.parse_primary()
     
     def parse_function(self):
+        function_token = self.current_token
         self.advance()  # consume 'fn'
         if self.current_token.type != TokenType.NAME:
             raise ParseError(
                 message=f"Expected function name",
-                line=self.current_token.line,
-                column=self.current_token.column
+                line=function_token.line,
+                column=function_token.column
             )
         func_name = self.current_token.value
         self.advance()
 
         if self.current_token.type != TokenType.LPAREN:
             raise ParseError(
-                message=f"Expected ')' after function name",
+                message=f"Expected '(' after function name",
                 line=self.current_token.line,
                 column=self.current_token.column
             )
@@ -328,7 +329,7 @@ class Parser():
     def parse_if(self):
         self.advance()  # skip 'if'
         test = self.parse_expr()
-        body = self.parse_block().statements
+        body = self.parse_block()
         orelse = None
         if self.current_token.type == TokenType.ELSE:
             self.advance()  # skip 'else'
@@ -345,7 +346,7 @@ class Parser():
                         column=self.current_token.column
                     )
                 # else { ... }
-                orelse = self.parse_block().statements
+                orelse = self.parse_block()
 
         return If(test, body, orelse)
     
@@ -524,7 +525,7 @@ class Parser():
             if node.orelse:
                 print(f"{pad}  Else:")
                 if isinstance(node.orelse, If):
-                    self.dump(node.orelse, If)
+                    self.dump(node.orelse, indent + 2)
                 
                 else:
                     for stmt in node.orelse:
@@ -540,10 +541,10 @@ class Parser():
             print(f"{pad}FunctionDef({node.name})")
             print(f"{pad}  Args:")
             for arg in node.args:
-                print(f"")
+                print(f"{pad}   {arg}")
             
             print(f"{pad}  Body:")
-            for stmt in node.body.statements:
+            for stmt in node.body:
                 self.dump(stmt, indent + 2)
         
         elif isinstance(node, While):
@@ -551,7 +552,7 @@ class Parser():
             self.dump(node.test, indent + 1)
             
             print(f"{pad}  Body:")
-            for stmt in node.body.statements:
+            for stmt in node.body:
                 self.dump(stmt, indent + 2)
         
         elif isinstance(node, For):
@@ -560,12 +561,12 @@ class Parser():
             self.dump(node.end, indent + 1)
             
             print(f"{pad}  Body:")
-            for stmt in node.body.statements:
+            for stmt in node.body:
                 self.dump(stmt, indent + 2)
         
         elif isinstance(node, Block):
             print(f"{pad}Block")
-            for stmt in node.statements:
+            for stmt in node:
                 self.dump(stmt, indent + 1)
         
         else:

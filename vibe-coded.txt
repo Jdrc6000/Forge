@@ -16,17 +16,18 @@ def fmt(x):
         return x.value
     return x
 code = """
-fn check(num) {
-    if num == 1 {
-        return "num is 1"
-    } else if num == 2 {
-        return "num is 2"
+fn check(a) {
+    if a == 1 {
+        return "a is 1"
+    } else if a == 2 {
+        return "a is 2"
+    } else if a == 3 {
+        return "a is 3"
     } else {
-        return "num is not 1 or 2"
+        return "idk what a is"
     }
 }
-print(check(2))
-print
+print(check(4))
 """
 num_regs = 1024
 start = time()
@@ -49,6 +50,7 @@ try:
     allocated = linear_scan_allocate(ir_generator.ir.code, num_regs=num_regs)
     for i, instr in enumerate(allocated):
         print(f"realloc{i} {instr.op} {fmt(instr.a)} {fmt(instr.b)} {fmt(instr.c)}")
+    start_vm = time()
     vm = VM(num_regs=num_regs)
     vm.code = allocated
     start_ip = vm.find_label("__main__")
@@ -56,6 +58,7 @@ try:
     vm.run(allocated)
     vm.dump_regs()
     print(f"took {time() - start} secs")
+    print(f"took {time() - start_vm} secs to run vm")
 except CompileError as e:
     print(e)
     print(format_diagnostic(
@@ -68,9 +71,10 @@ except CompileError as e:
         highlight_length=1
     ))
     exit(1)
+except IndexError as e:
+    raise RuntimeError(f"number of regs prolly too low: {e}") from e
 except Exception as e:
-    print(f"random error that shouldnt of appeared appeared: {e}")
-    raise
+    raise RuntimeError(f"couldnt even begin to tell you where this came from: {e}") from e
 
 --- src/exceptions.py ---
 from dataclasses import dataclass
@@ -125,7 +129,7 @@ class CompileError(Exception):
 class LexerError(CompileError): pass
 class ParseError(CompileError): pass
 class SemanticError(CompileError): pass
-class TypeError(CompileError): pass
+class TypeCheckError(CompileError): pass
 class UndefinedVariableError(SemanticError): pass
 class UnreachableCodeWarning(CompileError): pass
 
@@ -194,6 +198,8 @@ class For(AST):
 @dataclass
 class Block(AST):
     statements: List[AST]
+    def __iter__(self):
+        return iter(self.statements)
 
 --- src/frontend/lexer.py ---
 from src.frontend.token_maps import *
@@ -376,7 +382,7 @@ class Parser():
         if self.current_token.type == TokenType.PRINT:
             return self.parse_print()
         elif self.current_token.type == TokenType.LBRACE:
-            return Block(self.parse_block())
+            return self.parse_block()
         elif self.current_token.type == TokenType.IF:
             return self.parse_if()
         elif self.current_token.type == TokenType.NAME:
@@ -453,20 +459,21 @@ class Parser():
                 column=self.current_token.column
             )
     def parse_print(self):
+        print_token = self.current_token
         self.advance()
         if self.current_token.type != TokenType.LPAREN:
             raise ParseError(
                 message=f"Expected '(' after print",
-                line=self.current_token.line,
-                column=self.current_token.column
+                line=print_token.line,
+                column=print_token.column
             )
         self.advance()
         expr_node = self.parse_expr()
         if self.current_token.type != TokenType.RPAREN:
             raise ParseError(
                 message=f"Expected ')' after print arguments",
-                line=self.current_token.line,
-                column=self.current_token.column
+                line=print_token.line,
+                column=print_token.column
             )
         self.advance()
         return Call(
@@ -479,8 +486,8 @@ class Parser():
         if self.current_token.type != TokenType.EQ:
             raise ParseError(
                 message=f"Expected '=' after variable name",
-                line=self.current_token.line,
-                column=self.current_token.column
+                line=name_token.line,
+                column=name_token.column
             )
         self.advance()
         value_node = self.parse_expr()
@@ -558,18 +565,19 @@ class Parser():
         else:
             return self.parse_primary()
     def parse_function(self):
+        function_token = self.current_token
         self.advance()
         if self.current_token.type != TokenType.NAME:
             raise ParseError(
                 message=f"Expected function name",
-                line=self.current_token.line,
-                column=self.current_token.column
+                line=function_token.line,
+                column=function_token.column
             )
         func_name = self.current_token.value
         self.advance()
         if self.current_token.type != TokenType.LPAREN:
             raise ParseError(
-                message=f"Expected ')' after function name",
+                message=f"Expected '(' after function name",
                 line=self.current_token.line,
                 column=self.current_token.column
             )
@@ -601,7 +609,7 @@ class Parser():
     def parse_if(self):
         self.advance()
         test = self.parse_expr()
-        body = self.parse_block().statements
+        body = self.parse_block()
         orelse = None
         if self.current_token.type == TokenType.ELSE:
             self.advance()
@@ -614,7 +622,7 @@ class Parser():
                         line=self.current_token.line,
                         column=self.current_token.column
                     )
-                orelse = self.parse_block().statements
+                orelse = self.parse_block()
         return If(test, body, orelse)
     def parse_while(self):
         self.advance()
@@ -756,7 +764,7 @@ class Parser():
             if node.orelse:
                 print(f"{pad}  Else:")
                 if isinstance(node.orelse, If):
-                    self.dump(node.orelse, If)
+                    self.dump(node.orelse, indent + 2)
                 else:
                     for stmt in node.orelse:
                         self.dump(stmt, indent + 2)
@@ -769,26 +777,26 @@ class Parser():
             print(f"{pad}FunctionDef({node.name})")
             print(f"{pad}  Args:")
             for arg in node.args:
-                print(f"")
+                print(f"{pad}   {arg}")
             print(f"{pad}  Body:")
-            for stmt in node.body.statements:
+            for stmt in node.body:
                 self.dump(stmt, indent + 2)
         elif isinstance(node, While):
             print(f"{pad}While")
             self.dump(node.test, indent + 1)
             print(f"{pad}  Body:")
-            for stmt in node.body.statements:
+            for stmt in node.body:
                 self.dump(stmt, indent + 2)
         elif isinstance(node, For):
             print(f"{pad}For({node.target.id})")
             self.dump(node.start, indent + 1)
             self.dump(node.end, indent + 1)
             print(f"{pad}  Body:")
-            for stmt in node.body.statements:
+            for stmt in node.body:
                 self.dump(stmt, indent + 2)
         elif isinstance(node, Block):
             print(f"{pad}Block")
-            for stmt in node.statements:
+            for stmt in node:
                 self.dump(stmt, indent + 1)
         else:
             print(f"{pad}{node}")
@@ -969,7 +977,10 @@ class IRGenerator:
             jmp_end = len(self.ir.code)
             self.ir.emit("JUMP", None)
             self.ir.code[jmp_false].b = len(self.ir.code)
-            for stmt in node.orelse:
+            orelse = node.orelse
+            if isinstance(orelse, (If, Block)):
+                orelse = [orelse]
+            for stmt in orelse:
                 self.generate(stmt)
             self.ir.code[jmp_end].a = len(self.ir.code)
         else:
@@ -992,7 +1003,7 @@ class IRGenerator:
             return self.gen_logic(node)
         left = self.generate(node.left)
         right = self.generate(node.right)
-        dest = left
+        dest = self.ir.new_reg()
         self.ir.emit(BINOPS[node.op], dest, left, right)
         return dest
     def gen_logic(self, node):
@@ -1026,7 +1037,8 @@ class IRGenerator:
         instr = Instr("LABEL", node.name)
         instr.param_names = node.args
         self.ir.code.append(instr)
-        for stmt in node.body.statements:
+        stmts = node.body.statements if isinstance(node.body, Block) else node.body
+        for stmt in stmts:
             self.generate(stmt)
         default_reg = self.ir.new_reg()
         self.ir.emit("LOAD_CONST", default_reg, Imm(0))
@@ -1124,7 +1136,7 @@ class Optimiser:
         return tree
 
 --- src/optimiser/passes.py ---
-from src.frontend.ast_nodes import Constant, BinOp, UnOp, If
+from src.frontend.ast_nodes import Constant, Block
 class Pass:
     def __init__(self):
         self.visited = set()
@@ -1201,13 +1213,17 @@ class DeadCodeEliminator(Pass):
     def visit_If(self, node):
         node.test = self.run(node.test)
         if isinstance(node.test, Constant):
+            body = node.body.statements if isinstance(node.body, Block) else node.body
+            orelse = node.orelse or []
+            if isinstance(orelse, Block): orelse = orelse.statements
             if node.test.value:
-                return [self.run(stmt) for stmt in node.body.statements]
+                return [self.run(stmt) for stmt in body]
             else:
-                return [self.run(stmt) for stmt in (node.orelse or [])]
-        node.body = [self.run(s) for s in node.body]
+                return [self.run(stmt) for stmt in orelse]
+        node.body = [self.run(s) for s in (node.body.statements if isinstance(node.body, Block) else node.body)]
         if node.orelse:
-            node.orelse = [self.run(s) for s in node.orelse]
+            orelse = node.orelse.statements if isinstance(node.orelse, Block) else node.orelse
+            node.orelse = [self.run(s) for s in orelse]
         return node
 
 --- src/runtime/builtins.py ---
@@ -1260,6 +1276,8 @@ def get_defs_uses(instr):
         return defs, uses
     elif instr.op == "RETURN":
         return [], [instr.a] if instr.a else []
+    elif instr.op == "LABEL":
+        return [], []
     else:
         print(f"Warning: unknown op in regalloc: {instr.op}")
         return [], []
@@ -1370,7 +1388,6 @@ class VM:
                 return i
         raise RuntimeError(f"Label not found: {label_name}")
     def run(self, code):
-        self.ip = 0
         while self.ip < len(code):
             instr = code[self.ip]
             op, a, b, c = instr.op, instr.a, instr.b, instr.c
@@ -1460,6 +1477,7 @@ class VM:
 from src.semantic.types import *
 from src.frontend.ast_nodes import *
 from src.semantic.symbol_table import *
+from src.exceptions import *
 class Analyser():
     def __init__(self, symbols):
         self.symbols: SymbolTable = symbols
@@ -1469,6 +1487,8 @@ class Analyser():
             for stmt in node.body:
                 self.analyse(stmt)
         elif isinstance(node, Call):
+            if node.func.id != "print" and not self.symbols.exists(node.func.id):
+                raise UndefinedVariableError(f"Undefined function '{node.func.id}'")
             for arg in node.args:
                 self.analyse(arg)
             return None
@@ -1507,7 +1527,7 @@ class Analyser():
             return left
         elif isinstance(node, If):
             test_type = self.analyse(node.test)
-            if test_type != BOOL:
+            if test_type not in (BOOL, UNKNOWN) and test_type is not None:
                 raise TypeError("If condition must be boolean")
             for stmt in node.body:
                 self.analyse(stmt)
@@ -1542,7 +1562,7 @@ class Analyser():
             return return_type
         elif isinstance(node, While):
             test_type = self.analyse(node.test)
-            if test_type != BOOL:
+            if test_type not in (BOOL, UNKNOWN) and test_type is not None:
                 raise TypeError("While condition must be boolean")
             for stmt in node.body:
                 self.analyse(stmt)

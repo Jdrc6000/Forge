@@ -52,6 +52,9 @@ def get_defs_uses(instr):
 
     elif instr.op == "RETURN":
         return [], [instr.a] if instr.a else []
+    
+    elif instr.op == "LABEL":
+        return [], []
 
     else:
         print(f"Warning: unknown op in regalloc: {instr.op}")

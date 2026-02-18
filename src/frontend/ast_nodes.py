@@ -78,3 +78,6 @@ class For(AST):
 @dataclass
 class Block(AST):
     statements: List[AST]
+    
+    def __iter__(self):
+        return iter(self.statements)

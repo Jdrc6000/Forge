@@ -1,4 +1,4 @@
-from src.frontend.ast_nodes import Constant, BinOp, UnOp, If
+from src.frontend.ast_nodes import Constant, Block
 
 class Pass:
     def __init__(self):
@@ -98,16 +98,16 @@ class ConstantFolder(Pass):
 class DeadCodeEliminator(Pass):
     def visit_If(self, node):
         node.test = self.run(node.test)
-        
         if isinstance(node.test, Constant):
+            body = node.body.statements if isinstance(node.body, Block) else node.body
+            orelse = node.orelse or []
+            if isinstance(orelse, Block): orelse = orelse.statements
             if node.test.value:
-                return [self.run(stmt) for stmt in node.body.statements]
+                return [self.run(stmt) for stmt in body]
             else:
-                return [self.run(stmt) for stmt in (node.orelse or [])]
-        
-        node.body = [self.run(s) for s in node.body]
-        
+                return [self.run(stmt) for stmt in orelse]
+        node.body = [self.run(s) for s in (node.body.statements if isinstance(node.body, Block) else node.body)]
         if node.orelse:
-            node.orelse = [self.run(s) for s in node.orelse]
-        
+            orelse = node.orelse.statements if isinstance(node.orelse, Block) else node.orelse
+            node.orelse = [self.run(s) for s in orelse]
         return node
