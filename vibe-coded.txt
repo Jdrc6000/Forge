@@ -15,6 +15,14 @@ def fmt(x):
     if isinstance(x, Imm):
         return x.value
     return x
+def token_length(token):
+    if token is None:
+        return 1
+    if hasattr(token, 'id') and isinstance(token.id, str):
+        return len(token.id)
+    if hasattr(token, 'value') and token.value is not None:
+        return len(str(token.value))
+    return 1
 code = """
 fn check(a) {
     if a == 1 {
@@ -27,7 +35,8 @@ fn check(a) {
         return "idk what a is"
     }
 }
-print(check(2))
+result = check(2, 5)
+println(result, len(result))
 """
 num_regs = 1024
 start = time()
@@ -67,7 +76,7 @@ except CompileError as e:
         column=e.column or 1,
         message=e.message,
         level=e.level,
-        highlight_length=1
+        highlight_length=token_length(e.token)
     ))
     exit(1)
 except RuntimeError as e:
@@ -77,7 +86,7 @@ except RuntimeError as e:
         line=e.line or 1,
         column=e.column or 1,
         message=e.message,
-        highlight_length=1
+        highlight_length=token_length(e.token)
     ))
     exit(1)
 except IndexError as e:
@@ -1103,6 +1112,7 @@ from src.frontend.ast_nodes import *
 from src.frontend.token_maps import *
 from src.ir.ir import IR, Instr
 from src.ir.operands import Imm
+from src.runtime.builtins_registry import BUILTINS
 class IRGenerator:
     def __init__(self):
         self.ir = IR()
@@ -1134,10 +1144,12 @@ class IRGenerator:
         value_reg = self.generate(node.value)
         self.ir.emit("STORE_VAR", node.target.id, value_reg)
     def gen_Call(self, node):
-        if node.func.id == "print":
+        func_name = node.func.id
+        if func_name in BUILTINS:
             arg_regs = [self.generate(a) for a in node.args]
-            self.ir.emit("PRINT", arg_regs[0])
-            return None
+            dest = self.ir.new_reg()
+            self.ir.emit("CALL_BUILTIN", func_name, arg_regs, dest)
+            return dest
         else:
             arg_regs = [self.generate(a) for a in node.args]
             dest = self.ir.new_reg()
@@ -1405,14 +1417,36 @@ class DeadCodeEliminator(Pass):
             node.orelse = [self.run(s) for s in orelse]
         return node
 
---- src/runtime/builtins.py ---
-class Builtins:
-    @staticmethod
-    def print(vm, args_regs):
-        values = [vm.regs[r.id] for r in args_regs]
-        print(*values, sep=" ", end="\n")
-BUILTIN_FUNCTIONS = {
-    "print": Builtins.print
+--- src/runtime/builtins_registry.py ---
+from typing import Dict, Callable, List, TYPE_CHECKING
+from src.ir.operands import Reg
+if TYPE_CHECKING:
+    from .vm import VM
+class Builtin:
+    def __init__(self, name: str, func: Callable, min_args: int = 0, max_args: int = None):
+        self.name = name
+        self.func = func
+        self.min_args = min_args
+        self.max_args = max_args or min_args
+    def __call__(self, vm: VM, arg_regs: List[Reg]):
+        args = [vm.regs[r.id] for r in arg_regs]
+        if len(args) < self.min_args or (self.max_args is not None and len(args) > self.max_args):
+            raise RuntimeError(
+                message=f"Builtin '{self.name}' expected {self.min_args}-{self.max_args} args, got {len(args)}"
+            )
+        return self.func(vm, args)
+def builtin_print(vm: VM, args: list):
+    print(*args, sep=" ", end="")
+def builtin_println(vm: VM, args: list):
+    print(*args)
+def builtin_len(vm: VM, args: list):
+    if len(args) != 1:
+        raise ValueError("len() takes exactly one argument")
+    return len(args[0])
+BUILTINS: Dict[str, Builtin] = {
+    "print":   Builtin("print",   builtin_print,   min_args=0, max_args=999),
+    "println": Builtin("println", builtin_println, min_args=0, max_args=999),
+    "len":     Builtin("len",     builtin_len,     min_args=1, max_args=1),
 }
 
 --- src/runtime/regalloc.py ---
@@ -1509,7 +1543,9 @@ def linear_scan_allocate(code, num_regs):
         active.sort(key=lambda x: x.end)
     def rewrite_operand(op):
         if isinstance(op, Reg):
-            lr = range_map[op]
+            lr = range_map.get(op)
+            if lr is None:
+                return op
             if lr.phys is not None:
                 return Reg(lr.phys)
         return op
@@ -1544,6 +1580,7 @@ def linear_scan_allocate(code, num_regs):
 --- src/runtime/vm.py ---
 from src.frontend.token_types import *
 from src.exceptions import *
+from .builtins_registry import BUILTINS
 class VM:
     def __init__(self, num_regs):
         self.num_regs = num_regs
@@ -1554,6 +1591,7 @@ class VM:
         self.call_stack = []
         self.code = None
         self.ip = 0
+        self.builtins = BUILTINS
     def dump_regs(self):
         print(f"used regs: {len([reg for reg in self.regs if reg is not None])}")
         print(f"used spills: {len(self.stack)}")
@@ -1584,16 +1622,31 @@ class VM:
             elif op == "PRINT":
                 print(self.regs[a.id])
             elif op == "CALL":
-                self.call_stack.append((self.ip + 1, self.vars.copy(), b))
-                target_ip = self.find_label(a)
-                self.ip = target_ip
-                self.vars = {}
-                label_instr = code[target_ip]
-                param_names = getattr(label_instr, "param_names", [])
-                arg_regs = getattr(instr, "arg_regs", [])
-                for name, reg in zip(param_names, arg_regs):
-                    self.vars[name] = self.regs[reg.id]
-                continue
+                func_name = instr.a
+                if func_name in self.builtins:
+                    builtin = self.builtins[func_name]
+                    arg_regs = getattr(instr, "arg_regs", [])
+                    ret = builtin(self, arg_regs)
+                    if hasattr(instr, "c") and instr.c:
+                        self.regs[instr.c.id] = ret
+                else:
+                    self.call_stack.append((self.ip + 1, self.vars.copy(), b))
+                    target_ip = self.find_label(a)
+                    self.ip = target_ip
+                    self.vars = {}
+                    label_instr = code[target_ip]
+                    param_names = getattr(label_instr, "param_names", [])
+                    arg_regs = getattr(instr, "arg_regs", [])
+                    for name, reg in zip(param_names, arg_regs):
+                        self.vars[name] = self.regs[reg.id]
+                    continue
+            elif op == "CALL_BUILTIN":
+                func_name = instr.a
+                arg_regs = instr.b
+                builtin = self.builtins[func_name]
+                ret = builtin(self, arg_regs)
+                if instr.c:
+                    self.regs[instr.c.id] = ret
             elif op == "RETURN":
                 ret_value = None
                 if a is not None:
@@ -1666,6 +1719,7 @@ from src.semantic.types import *
 from src.frontend.ast_nodes import *
 from src.semantic.symbol_table import *
 from src.exceptions import *
+from src.runtime.builtins_registry import BUILTINS
 class Analyser():
     def __init__(self, symbols):
         self.symbols: SymbolTable = symbols
@@ -1675,14 +1729,17 @@ class Analyser():
             for stmt in node.body:
                 self.analyse(stmt)
         elif isinstance(node, Call):
-            if node.func.id == "print":
+            func_name = node.func.id
+            if func_name in BUILTINS:
                 for arg in node.args:
                     self.analyse(arg)
                 return None
             func_name = node.func.id
             if not self.symbols.exists(func_name):
+                suggestion = self.symbols.closest_match(func_name)
+                hint = f" Did you mean '{suggestion}'?" if suggestion else ""
                 raise UndefinedVariableError(
-                    message=f"Undefined function '{func_name}'",
+                    message=f"Undefined function '{func_name}'.{hint}",
                     token=node.func
                 )
             sym = self.symbols.get(func_name)
@@ -1696,7 +1753,7 @@ class Analyser():
             if expected is not None and actual != expected:
                 raise TypeError(
                     message=f"Function '{func_name}' expected {expected} argument(s), but {len(node.args)} given",
-                    token=node
+                    token=node.func
                 )
             for arg in node.args:
                 self.analyse(arg)
@@ -1708,8 +1765,10 @@ class Analyser():
             self.symbols.define(node.target.id, value_type)
         elif isinstance(node, Name):
             if not self.symbols.exists(node.id):
+                suggestion = self.symbols.closest_match(node.id)
+                hint = f" Did you mean '{suggestion}'?" if suggestion else ""
                 raise UndefinedVariableError(
-                    message=f"Undefined variable '{node.id}'",
+                    message=f"Undefined variable '{node.id}'.{hint}",
                     token=node
                 )
             return self.symbols.get(node.id)["type"]
@@ -1812,6 +1871,20 @@ class Analyser():
             return None
 
 --- src/semantic/symbol_table.py ---
+def levenshtein(a: str, b: str) -> int:
+    if len(a) < len(b):
+        a, b = b, a
+    prev = list(range(len(b) + 1))
+    for i, ca in enumerate(a, 1):
+        curr = [i]
+        for j, cb in enumerate(b, 1):
+            curr.append(min(
+                prev[j] + 1,
+                curr[j - 1] + 1,
+                prev[j - 1] + (ca != cb),
+            ))
+        prev = curr
+    return prev[-1]
 class SymbolTable():
     def __init__(self):
         self.scopes = [{}]
@@ -1827,6 +1900,19 @@ class SymbolTable():
             if name in scope:
                 return scope[name]
         return None
+    def all_names(self):
+        names = set()
+        for scope in self.scopes:
+            names.update(scope.keys())
+        return names
+    def closest_match(self, name: str, max_distance: int = 2) -> str | None:
+        candidates = self.all_names()
+        best, best_dist = None, max_distance + 1
+        for candidate in candidates:
+            d = levenshtein(name, candidate)
+            if d < best_dist:
+                best, best_dist = candidate, d
+        return best if best_dist <= max_distance else None
     def enter_scope(self):
         self.scopes.append({})
     def exit_scope(self):

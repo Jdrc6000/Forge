@@ -2,6 +2,7 @@ from src.semantic.types import *
 from src.frontend.ast_nodes import *
 from src.semantic.symbol_table import *
 from src.exceptions import *
+from src.runtime.builtins_registry import BUILTINS
 
 # message for future-josh
 #  this is going to be the most confusing, awful, horrid-looking code you have ever seen,
@@ -21,7 +22,8 @@ class Analyser():
                 self.analyse(stmt)
         
         elif isinstance(node, Call):
-            if node.func.id == "print":
+            func_name = node.func.id
+            if func_name in BUILTINS:
                 for arg in node.args:
                     self.analyse(arg)
                 return None
@@ -29,8 +31,10 @@ class Analyser():
             func_name = node.func.id
             
             if not self.symbols.exists(func_name):
+                suggestion = self.symbols.closest_match(func_name)
+                hint = f" Did you mean '{suggestion}'?" if suggestion else ""
                 raise UndefinedVariableError(
-                    message=f"Undefined function '{func_name}'",
+                    message=f"Undefined function '{func_name}'.{hint}",
                     token=node.func
                 )
             
@@ -46,7 +50,7 @@ class Analyser():
             if expected is not None and actual != expected:
                 raise TypeError(
                     message=f"Function '{func_name}' expected {expected} argument(s), but {len(node.args)} given",
-                    token=node
+                    token=node.func
                 )
             
             for arg in node.args:
@@ -64,8 +68,10 @@ class Analyser():
         
         elif isinstance(node, Name):
             if not self.symbols.exists(node.id):
+                suggestion = self.symbols.closest_match(node.id)
+                hint = f" Did you mean '{suggestion}'?" if suggestion else ""
                 raise UndefinedVariableError(
-                    message=f"Undefined variable '{node.id}'",
+                    message=f"Undefined variable '{node.id}'.{hint}",
                     token=node
                 )
             

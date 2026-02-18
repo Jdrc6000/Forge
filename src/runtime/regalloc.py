@@ -122,7 +122,9 @@ def linear_scan_allocate(code, num_regs):
     
     def rewrite_operand(op):
         if isinstance(op, Reg):
-            lr = range_map[op]      # lookup virtual Reg object
+            lr = range_map.get(op) # lookup virtual Reg object
+            if lr is None:
+                return op
             if lr.phys is not None:
                 return Reg(lr.phys)
         return op

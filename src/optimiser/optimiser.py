@@ -7,7 +7,7 @@ class Optimiser:
             DeadCodeEliminator(),
         ]
 
-    def optimize(self, tree):
+    def optimise(self, tree):
         for p in self.passes:
             tree = p.run(tree)
         return tree

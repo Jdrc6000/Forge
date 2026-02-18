@@ -18,6 +18,16 @@ def fmt(x):
         return x.value
     return x
 
+def token_length(token):
+    if token is None:
+        return 1
+    if hasattr(token, 'id') and isinstance(token.id, str):
+        return len(token.id)
+    # Token with a value
+    if hasattr(token, 'value') and token.value is not None:
+        return len(str(token.value))
+    return 1
+
 code = """
 fn check(a) {
     if a == 1 {
@@ -31,7 +41,8 @@ fn check(a) {
     }
 }
 
-print(check(2))
+result = check(2, 5)
+println(result, len(result))
 """
 num_regs = 1024
 start = time()
@@ -50,7 +61,7 @@ try:
     semantic_analysis.analyse(tree)
 
     optimiser = Optimiser()
-    tree = optimiser.optimize(tree)
+    tree = optimiser.optimise(tree)
     parser.dump(tree)
 
     ir_generator = IRGenerator()
@@ -82,7 +93,7 @@ except CompileError as e:
         column=e.column or 1,
         message=e.message,
         level=e.level,
-        highlight_length=1
+        highlight_length=token_length(e.token)
     ))
     exit(1)
 
@@ -93,7 +104,7 @@ except RuntimeError as e:
         line=e.line or 1,
         column=e.column or 1,
         message=e.message,
-        highlight_length=1
+        highlight_length=token_length(e.token)
     ))
     exit(1)
 

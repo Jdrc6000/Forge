@@ -2,6 +2,7 @@ from src.frontend.ast_nodes import *
 from src.frontend.token_maps import *
 from src.ir.ir import IR, Instr
 from src.ir.operands import Imm
+from src.runtime.builtins_registry import BUILTINS
 
 class IRGenerator:
     def __init__(self):
@@ -49,10 +50,14 @@ class IRGenerator:
         self.ir.emit("STORE_VAR", node.target.id, value_reg)
     
     def gen_Call(self, node):
-        if node.func.id == "print":
+        func_name = node.func.id
+        
+        if func_name in BUILTINS:
             arg_regs = [self.generate(a) for a in node.args]
-            self.ir.emit("PRINT", arg_regs[0])
-            return None
+            dest = self.ir.new_reg()
+            self.ir.emit("CALL_BUILTIN", func_name, arg_regs, dest) # NEW OPCODE!!!!!!
+            return dest
+
         else:
             arg_regs = [self.generate(a) for a in node.args]
             dest = self.ir.new_reg()

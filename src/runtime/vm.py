@@ -1,5 +1,6 @@
 from src.frontend.token_types import *
 from src.exceptions import *
+from .builtins_registry import BUILTINS
 
 # past-josh: PLEASE FOR THE LOVE OF GOD REFACTOR TO REGISTER-BASED!!
 # future-josh: your wish is my command
@@ -15,6 +16,8 @@ class VM:
         self.call_stack = [] # (ip, locals)
         self.code = None # to be set in main.py
         self.ip = 0 # instruction pointer
+        
+        self.builtins = BUILTINS
     
     def dump_regs(self): # simple dump debugger
         print(f"used regs: {len([reg for reg in self.regs if reg is not None])}")
@@ -57,22 +60,40 @@ class VM:
                 print(self.regs[a.id])
             
             elif op == "CALL":
-                # saves ip, vars, and dest reg
-                self.call_stack.append((self.ip + 1, self.vars.copy(), b))
+                func_name = instr.a
                 
-                target_ip = self.find_label(a)
-                self.ip = target_ip
-                self.vars = {}
+                if func_name in self.builtins:
+                    builtin = self.builtins[func_name]
+                    arg_regs = getattr(instr, "arg_regs", [])
+                    ret = builtin(self, arg_regs)
+                    if hasattr(instr, "c") and instr.c:
+                        self.regs[instr.c.id] = ret
+                
+                else:
+                    # saves ip, vars, and dest reg
+                    self.call_stack.append((self.ip + 1, self.vars.copy(), b))
+                    
+                    target_ip = self.find_label(a)
+                    self.ip = target_ip
+                    self.vars = {}
 
-                # get param names from the LABEL instruction itself
-                label_instr = code[target_ip]
-                param_names = getattr(label_instr, "param_names", [])
-                arg_regs = getattr(instr, "arg_regs", [])
+                    # get param names from the LABEL instruction itself
+                    label_instr = code[target_ip]
+                    param_names = getattr(label_instr, "param_names", [])
+                    arg_regs = getattr(instr, "arg_regs", [])
 
-                for name, reg in zip(param_names, arg_regs):
-                    self.vars[name] = self.regs[reg.id]
+                    for name, reg in zip(param_names, arg_regs):
+                        self.vars[name] = self.regs[reg.id]
 
-                continue
+                    continue
+            
+            elif op == "CALL_BUILTIN":
+                func_name = instr.a
+                arg_regs = instr.b
+                builtin = self.builtins[func_name]
+                ret = builtin(self, arg_regs)
+                if instr.c:
+                    self.regs[instr.c.id] = ret
 
             elif op == "RETURN":
                 ret_value = None
