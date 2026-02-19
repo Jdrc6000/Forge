@@ -107,9 +107,13 @@ class While(AST):
 @dataclass
 class For(AST):
     target: Name
-    start: AST
-    end: AST
     body: TypingList[AST]
+    
+    start: Optional[AST] = None
+    end: Optional[AST] = None
+    
+    iterable: Optional[AST] = None
+    
     line: int = 0
     column: int = 0
 

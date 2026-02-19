@@ -29,7 +29,13 @@ def token_length(token):
     return 1
 
 code = """
-a = 3 + 3
+i = 0
+while i < 10 {
+    i = i + 1
+    if i == 3 { continue }
+    if i == 7 { break }
+    println(i)
+}
 """
 num_regs = 1024
 start = time()
@@ -123,6 +129,6 @@ except Exception as e:
 #     proper call frame model instead of copying vars every call
 #     string interpolations (hopefully josh knows what this means)
 #     default function arugments
-#     break / continue in loops (PLEASE IMPLEMENT ME NOW!!!)
+#DONE break / continue in loops (PLEASE IMPLEMENT ME NOW!!!)
 #     more builtins
 #     type annotations
