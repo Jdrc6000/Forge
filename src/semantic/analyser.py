@@ -56,7 +56,7 @@ class Analyser():
             for arg in node.args:
                 self.analyse(arg)
             
-            return None
+            return UNKNOWN
         
         elif isinstance(node, Attribute):
             self.analyse(node.obj)

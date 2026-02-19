@@ -1976,7 +1976,7 @@ class Analyser():
                 )
             for arg in node.args:
                 self.analyse(arg)
-            return None
+            return UNKNOWN
         elif isinstance(node, Attribute):
             self.analyse(node.obj)
             return UNKNOWN
@@ -2181,6 +2181,8 @@ class StringType(Type):
 @dataclass(frozen=True)
 class BoolType(Type):
     name: ClassVar[str] = "bool"
+    def supports_binary(self, op, other):
+        return op in {"and", "or"} and isinstance(other, BoolType)
 @dataclass(frozen=True)
 class ListType(Type):
     name: ClassVar[str] = "list"

@@ -143,7 +143,7 @@ except Exception as e:
 #     self-hosting
 
 # further additions to my pain
-#     test suite
+#DONE test suite
 #DONE list / arrays
 #     multiple return values
 #     error messages through vm

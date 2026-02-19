@@ -34,6 +34,9 @@ class StringType(Type):
 @dataclass(frozen=True)
 class BoolType(Type):
     name: ClassVar[str] = "bool"
+    
+    def supports_binary(self, op, other):
+        return op in {"and", "or"} and isinstance(other, BoolType)
 
 # future proofing
 @dataclass(frozen=True)
