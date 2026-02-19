@@ -57,6 +57,8 @@ while i < nums.len() {
     print(nums.at(i))
     i = i + 1
 }
+
+println()
 """
 num_regs = 1024
 start = time()
@@ -152,3 +154,4 @@ except Exception as e:
 #     default function arugments
 #     break / continue in loops (PLEASE IMPLEMENT ME NOW!!!)
 #     more builtins
+#     type annotations

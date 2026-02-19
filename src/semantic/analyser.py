@@ -10,6 +10,7 @@ from src.runtime.builtins_registry import BUILTINS
 
 # future-josh here, i have to debug this now...
 # future-future-josh here, its currently 1:37am, and i am refactoring 2085 lines of goddamn code
+# future-future-future-josh here, its currently 1:33am on a wensday, and the code base has grown to 2800 lines of bloody code
 
 class Analyser():
     def __init__(self, symbols):

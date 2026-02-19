@@ -13,10 +13,12 @@ class Builtin:
 
     def __call__(self, vm: VM, arg_regs: List[Reg]):
         args = [vm.regs[r.id] for r in arg_regs]
+        
         if len(args) < self.min_args or (self.max_args is not None and len(args) > self.max_args):
             raise RuntimeError(
                 message=f"Builtin '{self.name}' expected {self.min_args}-{self.max_args} args, got {len(args)}"
             )
+        
         return self.func(vm, args)
 
 def builtin_print(vm: VM, args: list):

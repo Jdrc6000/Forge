@@ -72,8 +72,10 @@ class Parser():
         elif self.current_token.type == TokenType.NAME:
             if self.peek() and self.peek().type == TokenType.LPAREN:
                 return self.parse_call()
+            
             elif self.peek() and self.peek().type == TokenType.EQ:
                 return self.parse_assign()
+            
             else:
                 return Expr(
                     value=Name(
@@ -96,6 +98,7 @@ class Parser():
         
         elif self.current_token.type == TokenType.RETURN:
             return self.parse_return()
+        
         else:
             return Expr(
                 value=self.parse_expr(),
@@ -267,6 +270,7 @@ class Parser():
         left = self.parse_binop()
         ops = []
         comparators = []
+        
         while self.current_token.type in (
             TokenType.EE, TokenType.NE, TokenType.LESS,
             TokenType.GREATER, TokenType.LE, TokenType.GE
@@ -285,6 +289,7 @@ class Parser():
                 line=comparision_token.line,
                 column=comparision_token.column
             )
+        
         return left
     
     def parse_logic_or(self):
@@ -579,7 +584,7 @@ class Parser():
                 line=self.current_token.line,
                 column=self.current_token.column
             )
-        self.advance() # eat '{'
+        self.advance() # skip '{'
         
         body = []
         while self.current_token.type not in (TokenType.RBRACE, TokenType.EOF):
@@ -593,7 +598,7 @@ class Parser():
                 line=self.current_token.line,
                 column=self.current_token.column
             )
-        self.advance() # eat '}'
+        self.advance() # skip '}'
         
         return Block(
             statements=body,

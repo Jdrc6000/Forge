@@ -186,8 +186,10 @@ class IRGenerator:
 
         if node.op == "-":
             self.ir.emit("NEG", dest, src)
+        
         elif node.op == "not":
             self.ir.emit("NOT", dest, src)
+        
         else:
             self.ir.emit("MOVE", dest, src)
 
@@ -209,6 +211,7 @@ class IRGenerator:
     def gen_Return(self, node):
         if node.value:
             reg = self.generate(node.value)
+        
         else:
             reg = self.ir.new_reg()
             self.ir.emit("LOAD_CONST", reg, Imm(0))

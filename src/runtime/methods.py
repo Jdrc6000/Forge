@@ -59,9 +59,11 @@ def resolve_member(obj: Any, name: str) -> Callable:
     if isinstance(obj, str):
         if name in STRING_MEMBERS:
             return STRING_MEMBERS[name]
+    
     elif isinstance(obj, list):
         if name in LIST_MEMBERS:
             return LIST_MEMBERS[name]
+    
     elif isinstance(obj, (int, float)):
         if name in NUMBER_MEMBERS:
             return NUMBER_MEMBERS[name]
