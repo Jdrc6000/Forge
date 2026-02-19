@@ -7,6 +7,7 @@ from src.runtime.builtins_registry import BUILTINS
 class IRGenerator:
     def __init__(self):
         self.ir = IR()
+        self.loop_stack = [] # [continue_ip, [break_patch_indicies]]
     
     def generate(self, node):
         method = f"gen_{type(node).__name__}"
@@ -225,14 +226,21 @@ class IRGenerator:
         jmp_exit = len(self.ir.code)
         self.ir.emit("JUMP_IF_FALSE", test_reg, None)  # exit if false
 
+        self.loop_stack.append(([], []))
         for stmt in node.body:
             self.generate(stmt)
+        continue_patches, break_patches = self.loop_stack.pop()
 
         self.ir.emit("JUMP", start_label)      # jump back to start
-        self.ir.code[jmp_exit].b = len(self.ir.code)  # patch exit
+        exit_ip = len(self.ir.code)
+        self.ir.code[jmp_exit].b = exit_ip  # patch exit
+        
+        for patch in continue_patches:
+            self.ir.code[patch].a = start_label
+        for patch in break_patches:
+            self.ir.code[patch].a = exit_ip
     
     def gen_For(self, node):
-        # Generate start and end values
         start_reg = self.generate(node.start)
         end_reg = self.generate(node.end)
 
@@ -253,12 +261,14 @@ class IRGenerator:
 
         jmp_exit = len(self.ir.code)
         self.ir.emit("JUMP_IF_FALSE", cmp_reg, None)
-
-        # Generate loop body
+        
+        self.loop_stack.append((None, []))
         for stmt in node.body:
             self.generate(stmt)
+        _, break_patches = self.loop_stack.pop()
 
         # Increment loop variable
+        increment_ip = len(self.ir.code)
         self.ir.emit("LOAD_VAR", var_reg, node.target.id)
         one_reg = self.ir.new_reg()
         self.ir.emit("LOAD_CONST", one_reg, Imm(1))
@@ -267,4 +277,22 @@ class IRGenerator:
 
         # Jump back to start
         self.ir.emit("JUMP", loop_start)
-        self.ir.code[jmp_exit].b = len(self.ir.code)
+        
+        exit_ip = len(self.ir.code)
+        self.ir.code[jmp_exit].b = exit_ip
+        for patch in break_patches:
+            self.ir.code[patch].a = exit_ip
+        
+        for i, instr in enumerate(self.ir.code):
+            if instr.op == "JUMP" and instr.a == "CONTINUE_PLACEHOLDER":
+                self.ir.code[i].a = increment_ip
+    
+    def gen_Break(self, node):
+        patch_index = len(self.ir.code)
+        self.ir.emit("JUMP", None)
+        self.loop_stack[-1][1].append(patch_index)
+    
+    def gen_Continue(self, node):
+        patch_index = len(self.ir.code)
+        self.ir.emit("JUMP", None)
+        self.loop_stack[-1][0].append(patch_index)

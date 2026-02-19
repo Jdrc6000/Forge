@@ -120,6 +120,16 @@ class List(AST):
     column: int = 0
 
 @dataclass
+class Break(AST):
+    line: int = 0
+    column: int = 0
+
+@dataclass
+class Continue(AST):
+    line: int = 0
+    column: int = 0
+
+@dataclass
 class Attribute(AST):
     obj: AST
     attr: str

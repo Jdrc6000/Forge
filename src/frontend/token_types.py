@@ -32,6 +32,8 @@ class TokenType(Enum):
     FOR = auto()
     IN = auto()
     RANGE = auto()
+    BREAK = auto()
+    CONTINUE = auto()
     
     AND = auto()
     OR = auto()

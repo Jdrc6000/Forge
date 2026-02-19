@@ -29,36 +29,7 @@ def token_length(token):
     return 1
 
 code = """
-fn check(a) {
-    if a == 1 {
-        return "a is 1"
-    } else if a == 2 {
-        return "a Is 2"
-    } else if a == 3 {
-        return "a is 3"
-    } else {
-        return "idk what a is"
-    }
-}
-
-result = check(2)
-
-i = 0
-while i < result.len() {
-    print(result.at(i).lower())
-    i = i + 1
-}
-
-println()
-
-nums = [1, 2, 3, 4, 5]
-i = 0
-while i < nums.len() {
-    print(nums.at(i))
-    i = i + 1
-}
-
-println()
+a = 3 + 3
 """
 num_regs = 1024
 start = time()

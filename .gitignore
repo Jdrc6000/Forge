@@ -1,6 +1,8 @@
 __pycache__/
+.pytest_cache/
 *.pyc
-venv/
-.env
+.venv/
+.env/
 __init__.py
 vibe-coded.txt
+.DS_Store

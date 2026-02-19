@@ -99,6 +99,22 @@ class Parser():
         elif self.current_token.type == TokenType.RETURN:
             return self.parse_return()
         
+        elif self.current_token.type == TokenType.BREAK:
+            tok = self.current_token
+            self.advance()
+            return Break(
+                line=tok.line,
+                column=tok.column
+            )
+        
+        elif self.current_token.type == TokenType.CONTINUE:
+            tok = self.current_token
+            self.advance()
+            return Continue(
+                line=tok.line,
+                column=tok.column
+            )
+        
         else:
             return Expr(
                 value=self.parse_expr(),

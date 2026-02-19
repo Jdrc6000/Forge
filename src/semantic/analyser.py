@@ -16,6 +16,7 @@ class Analyser():
     def __init__(self, symbols):
         self.symbols: SymbolTable = symbols
         self.current_function = None
+        self.loop_depth = 0
     
     def analyse(self, node):
         if isinstance(node, Module):
@@ -197,8 +198,10 @@ class Analyser():
                     token=node
                 )
             
+            self.loop_depth += 1
             for stmt in node.body:
                 self.analyse(stmt)
+            self.loop_depth -= 1
         
         elif isinstance(node, For):
             start_type = self.analyse(node.start)
@@ -212,8 +215,23 @@ class Analyser():
 
             self.symbols.define(node.target.id, NUMBER)
 
+            self.loop_depth += 1
             for stmt in node.body:
                 self.analyse(stmt)
+            self.loop_depth -= 1
+        
+        elif isinstance(node, Break):
+            if self.loop_depth == 0:
+                raise SemanticError(
+                    message="'break' outside of loop",
+                    token=node
+                )
+        elif isinstance(node, Continue):
+            if self.loop_depth == 0:
+                raise SemanticError(
+                    message="'continue' outside of loop",
+                    token=node
+                )
         
         elif isinstance(node, List):
             element_types = [self.analyse(element) for element in node.elements]
