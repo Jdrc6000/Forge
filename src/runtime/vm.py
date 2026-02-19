@@ -213,7 +213,6 @@ class VM:
                 self.regs[a.id] = self.regs[b.id] and self.regs[c.id]
 
             else:
-                # i literally dont know what error type to use, so i just used compiler
                 raise UnknownOpcodeError(
                     message=f"Unknown opcode {op}",
                     ip=self.ip,

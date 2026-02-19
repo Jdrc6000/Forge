@@ -36,9 +36,9 @@ class BoolType(Type):
     name: ClassVar[str] = "bool"
     
     def supports_binary(self, op, other):
-        return op in {"and", "or"} and isinstance(other, BoolType)
+        if op in {"and", "or"}:
+            return isinstance(other, BoolType)
 
-# future proofing
 @dataclass(frozen=True)
 class ListType(Type):
     name: ClassVar[str] = "list"

@@ -13,6 +13,7 @@ class Pass:
         method = f"visit_{type(node).__name__}"
         if hasattr(self, method):
             return getattr(self, method, self.generic)(node)
+        
         else:
             return self.generic(node)
     
@@ -29,10 +30,13 @@ class Pass:
         for field, value in vars(node).items():
             if isinstance(value, list):
                 new_list = []
+                
                 for v in value:
                     result = self.run(v)
+                    
                     if isinstance(result, list):
                         new_list.extend(result)
+                    
                     else:
                         new_list.append(result)
                 setattr(node, field, new_list)
@@ -41,6 +45,7 @@ class Pass:
                 result = self.run(value)
                 try:
                     setattr(node, field, result)
+                
                 except FrozenInstanceError:
                     pass # shant do anything to get in the way...
 
@@ -83,18 +88,20 @@ class ConstantFolder(Pass):
         node.left = self.run(node.left)
         node.comparators = [self.run(c) for c in node.comparators]
 
-        # Very simple case: everything constant
         if isinstance(node.left, Constant) and all(isinstance(c, Constant) for c in node.comparators):
             values = [node.left.value] + [c.value for c in node.comparators]
             result = True
+            
             for i, op in enumerate(node.ops):
                 a, b = values[i], values[i+1]
+                
                 if op == "==":   result = result and (a == b)
                 elif op == "!=": result = result and (a != b)
                 elif op == "<":  result = result and (a < b)
                 elif op == ">":  result = result and (a > b)
                 elif op == "<=": result = result and (a <= b)
                 elif op == ">=": result = result and (a >= b)
+            
             return Constant(result)
 
         return node
@@ -102,16 +109,22 @@ class ConstantFolder(Pass):
 class DeadCodeEliminator(Pass):
     def visit_If(self, node):
         node.test = self.run(node.test)
+        
         if isinstance(node.test, Constant):
             body = node.body.statements if isinstance(node.body, Block) else node.body
             orelse = node.orelse or []
+            
             if isinstance(orelse, Block): orelse = orelse.statements
             if node.test.value:
                 return [self.run(stmt) for stmt in body]
+
             else:
                 return [self.run(stmt) for stmt in orelse]
+        
         node.body = [self.run(s) for s in (node.body.statements if isinstance(node.body, Block) else node.body)]
+        
         if node.orelse:
             orelse = node.orelse.statements if isinstance(node.orelse, Block) else node.orelse
             node.orelse = [self.run(s) for s in orelse]
+        
         return node

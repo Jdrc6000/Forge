@@ -148,3 +148,7 @@ except Exception as e:
 #     multiple return values
 #     error messages through vm
 #     proper call frame model instead of copying vars every call
+#     string interpolations (hopefully josh knows what this means)
+#     default function arugments
+#     break / continue in loops (PLEASE IMPLEMENT ME NOW!!!)
+#     more builtins
