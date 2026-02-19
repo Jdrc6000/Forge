@@ -2,7 +2,7 @@
 > A simple compiler written in Python.
 
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
-![Python](https://img.shields.io/badge/python-3.14.2-blue.svg)
+![Python](https://img.shields.io/badge/python-3.12+-blue.svg)
 
 ## Table of Contents
 1. [About](#about)
@@ -27,7 +27,7 @@ Forge is an educational personal project designed to help understand how program
 ## Features
 * Responsive error messages
 * Custom builtin functions
-* Optimisations: Dead Code Elimination (DCE), Control Flow (CF)
+* Optimisations: Dead Code Elimination (DCE), Constant Folding (CF)
 * Test suite (100 tests covering 8 classes)
 
 ## Notes
@@ -35,7 +35,7 @@ Forge is an educational personal project designed to help understand how program
     * The code will be messy
     * There will be bugs
     * It is not supposed to be easy to use
-* In the latest commit, ```main.py``` is hardcoded to output many debug statements, thus this repo is not meant for beginners.
+* In the latest commit, `main.py` is hardcoded to output many debug statements, thus this repo is not meant for beginners.
 > 初心者向けではありません。デバッグ用出力が多く、コードも整理されていません。
 
 ## Roadmap
@@ -44,9 +44,9 @@ Planned improvements:
 |---------|----------|-------|
 | Additional optimisation passes | low |
 | Module system | high | Supports multiple files |
-| Compile to bytecode instead of using a VM | low |
+| Compile to bytecode | low |
 | Structs | high | User-defined data types |
-| Real types instead of Python types | medium | Supoort for custom types |
+| Real types instead of Python types | medium | Support for custom types |
 | String interpolations | medium | Supports defining variables inside strings |
 
 ## Examples
