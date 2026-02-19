@@ -6,6 +6,8 @@ class Type:
     name: ClassVar[str]
 
     def is_compatible(self, other: "Type") -> bool:
+        if isinstance(other, UnknownType):
+            return True
         return self == other
 
     def supports_binary(self, op: str, other: "Type") -> bool:

@@ -84,6 +84,14 @@ class IRGenerator:
         self.ir.code.append(instr)
         return dest
     
+    def gen_List(self, node):
+        element_regs = [self.generate(element) for element in node.elements]
+        dest = self.ir.new_reg()
+        instr = Instr("BUILD_LIST", dest)
+        instr.arg_regs = element_regs
+        self.ir.code.append(instr)
+        return dest
+    
     # uses backpatching
     def gen_If(self, node):
         test = self.generate(node.test)
@@ -111,14 +119,13 @@ class IRGenerator:
             self.ir.code[jmp_false].b = len(self.ir.code)
     
     # here be dragons
-    # honestly tho, i havent a clue whats going on, but all i know
-    # is that you can now do:
+    # honestly tho, i havent a clue whats going on, but all i know is that you can now do:
     #   a < b < c
     def gen_Compare(self, node):
         # We generate:   result = left op1 comp[0]  AND  comp[0] op2 comp[1]  AND ...
         left_reg = self.generate(node.left)
         result_reg = self.ir.new_reg()
-        self.ir.emit("LOAD_CONST", result_reg, Imm(True))   # start assuming true
+        self.ir.emit("LOAD_CONST", result_reg, Imm(True)) # start assuming true
 
         current_left = left_reg
 

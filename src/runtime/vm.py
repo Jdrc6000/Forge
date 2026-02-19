@@ -147,6 +147,10 @@ class VM:
                 else:
                     break
             
+            elif op == "BUILD_LIST":
+                arg_regs = getattr(instr, "arg_regs", [])
+                self.regs[a.id] = [self.regs[r.id] for r in arg_regs]
+            
             elif op == "LABEL":
                 # its literally just a label...
                 # its meant to do nothing

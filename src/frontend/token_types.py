@@ -23,7 +23,6 @@ class TokenType(Enum):
     EOF = auto()
     IF = auto()
     ELSE = auto()
-    PRINT = auto()
     AND = auto()
     OR = auto()
     NOT = auto()
@@ -41,3 +40,8 @@ class TokenType(Enum):
     LBRACE = auto()
     RBRACE = auto()
     ILLEGAL = auto()
+    LBRACKET = auto()
+    RBRACKET = auto()
+    
+    PRINT = auto()
+    PRINTLN = auto()

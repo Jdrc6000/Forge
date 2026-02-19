@@ -1,4 +1,5 @@
 from src.frontend.ast_nodes import Constant, Block
+from dataclasses import FrozenInstanceError
 
 class Pass:
     def __init__(self):
@@ -38,7 +39,10 @@ class Pass:
 
             elif hasattr(value, "__dict__"):
                 result = self.run(value)
-                setattr(node, field, result)
+                try:
+                    setattr(node, field, result)
+                except FrozenInstanceError:
+                    pass # shant do anything to get in the way...
 
         return node
 

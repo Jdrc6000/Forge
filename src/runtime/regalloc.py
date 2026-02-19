@@ -70,6 +70,10 @@ def get_defs_uses(instr):
     elif instr.op == "LABEL":
         return [], []
 
+    elif instr.op == "BUILD_LIST":
+        uses = instr.arg_regs if hasattr(instr, "arg_regs") else []
+        return [instr.a], uses
+
     else:
         print(f"Warning: unknown op in regalloc: {instr.op}")
         return [], []
@@ -171,6 +175,12 @@ def linear_scan_allocate(code, num_regs):
                 rewrite_operand(instr.a),
                 rewrite_operand(instr.b),
                 instr.c # REFRAIN FROM REWRITING AT ALL TIMES, DOING SO WILL DISTRUPT THE COSMIC ENERGY OF THE UNIVERSE AND OBLITERATE EVERYTHING (only cuz its the attr/method name)
+            )
+        
+        elif instr.op == "BUILD_LIST":
+            new_instr = Instr(
+                "BUILD_LIST",
+                rewrite_operand(instr.a)
             )
         
         else:

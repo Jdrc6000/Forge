@@ -26,7 +26,7 @@ class Analyser():
             if func_name in BUILTINS:
                 for arg in node.args:
                     self.analyse(arg)
-                return None
+                return UNKNOWN
             
             func_name = node.func.id
             
@@ -69,7 +69,7 @@ class Analyser():
             return UNKNOWN
         
         # unused?
-        # no past-josh... if an expression node occurs, it passes straight through...
+        # no past-josh... if an expression node occurs, it just passes straight through since its a wrapper
         elif isinstance(node, Expr):
             self.analyse(node.value)
         
@@ -213,6 +213,16 @@ class Analyser():
 
             for stmt in node.body:
                 self.analyse(stmt)
+        
+        elif isinstance(node, List):
+            element_types = [self.analyse(element) for element in node.elements]
+            
+            if element_types and all(t == element_types[0] for t in element_types):
+                node.inferred_type = ListType(element_types[0])
+                return ListType(element_types[0])
+            
+            node.inferred_type = ListType(UNKNOWN)
+            return ListType(UNKNOWN)
         
         else:
             return None

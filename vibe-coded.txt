@@ -36,7 +36,18 @@ fn check(a) {
     }
 }
 result = check(2)
-println(result.upper())
+i = 0
+while i < result.len() {
+    print(result.at(i).lower())
+    i = i + 1
+}
+println()
+nums = [1, 2, 3, 4, 5]
+i = 0
+while i < nums.len() {
+    print(nums.at(i))
+    i = i + 1
+}
 """
 num_regs = 1024
 start = time()
@@ -174,18 +185,18 @@ class LabelNotFoundError(RuntimeError): pass
 
 --- src/frontend/ast_nodes.py ---
 from dataclasses import dataclass, field
-from typing import List, Optional, Any, Union, Tuple
+from typing import List as TypingList, Optional, Any, Union, Tuple
 @dataclass
 class AST:
     inferred_type = None
 @dataclass
 class Module(AST):
-    body: List[AST]
+    body: TypingList[AST]
     line: int = 0
     column: int = 0
 @dataclass
 class Block(AST):
-    statements: List[AST]
+    statements: TypingList[AST]
     line: int = 0
     column: int = 0
     def __iter__(self):
@@ -193,7 +204,7 @@ class Block(AST):
 @dataclass
 class Call(AST):
     func: AST
-    args: List[AST]
+    args: TypingList[AST]
     line: int = 0
     column: int = 0
 @dataclass
@@ -240,15 +251,15 @@ class If(AST):
 @dataclass
 class Compare(AST):
     left: AST
-    ops: list[str]
-    comparators: List[AST]
+    ops: TypingList[str]
+    comparators: TypingList[AST]
     line: int = 0
     column: int = 0
 @dataclass
 class FunctionDef(AST):
     name: str
-    args: list[str]
-    body: list[AST]
+    args: TypingList[str]
+    body: TypingList[AST]
     line: int = 0
     column: int = 0
 @dataclass
@@ -259,7 +270,7 @@ class Return(AST):
 @dataclass
 class While(AST):
     test: AST
-    body: list[AST]
+    body: TypingList[AST]
     line: int = 0
     column: int = 0
 @dataclass
@@ -267,7 +278,12 @@ class For(AST):
     target: Name
     start: AST
     end: AST
-    body: list[AST]
+    body: TypingList[AST]
+    line: int = 0
+    column: int = 0
+@dataclass
+class List(AST):
+    elements: TypingList[AST]
     line: int = 0
     column: int = 0
 @dataclass
@@ -280,7 +296,7 @@ class Attribute(AST):
 class MethodCall(AST):
     obj: AST
     method: str
-    args: List[AST]
+    args: TypingList[AST]
     line: int = 0
     column: int = 0
 
@@ -435,6 +451,7 @@ class Lexer():
         return tokens
 
 --- src/frontend/parser.py ---
+from src.frontend.token_maps import CMP_TOK_TO_STR
 from src.frontend.token_types import *
 from src.frontend.ast_nodes import *
 from src.frontend.token import Token
@@ -566,6 +583,28 @@ class Parser():
                 line=tok.line,
                 column=tok.column
             )
+        elif tok.type == TokenType.LBRACKET:
+            self.advance()
+            elements = []
+            if self.current_token.type != TokenType.RBRACKET:
+                while True:
+                    elements.append(self.parse_expr())
+                    if self.current_token.type == TokenType.COMMA:
+                        self.advance()
+                    elif self.current_token.type == TokenType.RBRACKET:
+                        break
+                    else:
+                        raise ParseError(
+                            message="Expected ',' or ']' in list literal",
+                            line=self.current_token.line,
+                            column=self.current_token.column
+                        )
+            self.advance()
+            node = List(
+                elements=elements,
+                line=tok.line,
+                column=tok.column
+            )
         else:
             raise ParseError(
                 message=f"Unexpected token: {tok}",
@@ -632,21 +671,14 @@ class Parser():
             TokenType.EE, TokenType.NE, TokenType.LESS,
             TokenType.GREATER, TokenType.LE, TokenType.GE
         ):
-            op_str = {
-                TokenType.EE: "==",
-                TokenType.NE: "!=",
-                TokenType.LESS: "<",
-                TokenType.GREATER: ">",
-                TokenType.LE: "<=",
-                TokenType.GE: ">=",
-            }[self.current_token.type]
+            op_str = CMP_TOK_TO_STR[self.current_token.type]
             ops.append(op_str)
             self.advance()
             comparators.append(self.parse_binop())
         if ops:
             return Compare(
                 left=left,
-                op=ops,
+                ops=ops,
                 comparators=comparators,
                 line=comparision_token.line,
                 column=comparision_token.column
@@ -977,14 +1009,6 @@ class Parser():
             self.dump(node.left, indent + 1)
             for comp in node.comparators:
                 self.dump(comp, indent + 1)
-        elif isinstance(node, FunctionDef):
-            print(f"{pad}FunctionDef({node.name})")
-            print(f"{pad}  Args:")
-            for arg in node.args:
-                print(f"{pad}   {arg}")
-            print(f"{pad}  Body:")
-            for stmt in node.body:
-                self.dump(stmt, indent + 2)
         elif isinstance(node, While):
             print(f"{pad}While")
             self.dump(node.test, indent + 1)
@@ -1002,10 +1026,22 @@ class Parser():
             print(f"{pad}Block")
             for stmt in node:
                 self.dump(stmt, indent + 1)
+        elif isinstance(node, FunctionDef):
+            print(f"{pad}FunctionDef({node.name})")
+            print(f"{pad}  Args:")
+            for arg in node.args:
+                print(f"{pad}   {arg}")
+            print(f"{pad}  Body:")
+            for stmt in node.body:
+                self.dump(stmt, indent + 2)
         elif isinstance(node, Return):
             print(f"{pad}Return")
             if node.value:
                 self.dump(node.value, indent + 1)
+        elif isinstance(node, List):
+            print(f"{pad}List")
+            for element in node.elements:
+                self.dump(element, indent + 1)
         else:
             print(f"{pad}{node}")
 
@@ -1029,16 +1065,15 @@ from src.frontend.token_types import TokenType
 KEYWORDS = {
     "if": TokenType.IF,
     "else": TokenType.ELSE,
-    "print": TokenType.PRINT,
     "and": TokenType.AND,
     "or": TokenType.OR,
     "not": TokenType.NOT,
     "true": TokenType.TRUE,
     "false": TokenType.FALSE,
-    "fn": TokenType.FN,
     "while": TokenType.WHILE,
     "for": TokenType.FOR,
     "in": TokenType.IN,
+    "fn": TokenType.FN,
     "return": TokenType.RETURN,
 }
 SINGLE_CHAR_TOKENS = {
@@ -1057,7 +1092,9 @@ SINGLE_CHAR_TOKENS = {
     "(": TokenType.LPAREN,
     ")": TokenType.RPAREN,
     "{": TokenType.LBRACE,
-    "}": TokenType.RBRACE
+    "}": TokenType.RBRACE,
+    "[": TokenType.LBRACKET,
+    "]": TokenType.RBRACKET,
 }
 COMPARISIONS = {
     "EE": "EQ",
@@ -1067,20 +1104,28 @@ COMPARISIONS = {
     "LE": "LE",
     "GE": "GE"
 }
-CMP_OP_TO_IR = {
-    "==": "EQ",
-    "!=": "NE",
-    "<" : "LT",
-    ">" : "GT",
-    "<=": "LE",
-    ">=": "GE",
-}
 BINOPS = {
     "+": "ADD",
     "-": "SUB",
     "*": "MUL",
     "/": "DIV",
     "^": "POW"
+}
+CMP_OP_TO_IR = {
+    "==": "EQ",
+    "!=": "NE",
+    "<" : "LT",
+    ">" : "GT",
+    "<=": "LE",
+    ">=": "GE"
+}
+CMP_TOK_TO_STR = {
+    TokenType.EE: "==",
+    TokenType.NE: "!=",
+    TokenType.LESS: "<",
+    TokenType.GREATER: ">",
+    TokenType.LE: "<=",
+    TokenType.GE: ">=",
 }
 
 --- src/frontend/token_types.py ---
@@ -1108,7 +1153,6 @@ class TokenType(Enum):
     EOF = auto()
     IF = auto()
     ELSE = auto()
-    PRINT = auto()
     AND = auto()
     OR = auto()
     NOT = auto()
@@ -1126,6 +1170,10 @@ class TokenType(Enum):
     LBRACE = auto()
     RBRACE = auto()
     ILLEGAL = auto()
+    LBRACKET = auto()
+    RBRACKET = auto()
+    PRINT = auto()
+    PRINTLN = auto()
 
 --- src/ir/generator.py ---
 from src.frontend.ast_nodes import *
@@ -1190,6 +1238,13 @@ class IRGenerator:
         dest = self.ir.new_reg()
         instr = Instr("CALL_METHOD", dest, obj_reg, node.method)
         instr.arg_regs = arg_regs
+        self.ir.code.append(instr)
+        return dest
+    def gen_List(self, node):
+        element_regs = [self.generate(element) for element in node.elements]
+        dest = self.ir.new_reg()
+        instr = Instr("BUILD_LIST", dest)
+        instr.arg_regs = element_regs
         self.ir.code.append(instr)
         return dest
     def gen_If(self, node):
@@ -1362,6 +1417,7 @@ class Optimiser:
 
 --- src/optimiser/passes.py ---
 from src.frontend.ast_nodes import Constant, Block
+from dataclasses import FrozenInstanceError
 class Pass:
     def __init__(self):
         self.visited = set()
@@ -1392,7 +1448,10 @@ class Pass:
                 setattr(node, field, new_list)
             elif hasattr(value, "__dict__"):
                 result = self.run(value)
-                setattr(node, field, result)
+                try:
+                    setattr(node, field, result)
+                except FrozenInstanceError:
+                    pass
         return node
 class ConstantFolder(Pass):
     def visit_BinOp(self, node):
@@ -1596,6 +1655,9 @@ def get_defs_uses(instr):
         return [], [instr.a] if instr.a else []
     elif instr.op == "LABEL":
         return [], []
+    elif instr.op == "BUILD_LIST":
+        uses = instr.arg_regs if hasattr(instr, "arg_regs") else []
+        return [instr.a], uses
     else:
         print(f"Warning: unknown op in regalloc: {instr.op}")
         return [], []
@@ -1676,6 +1738,11 @@ def linear_scan_allocate(code, num_regs):
                 rewrite_operand(instr.a),
                 rewrite_operand(instr.b),
                 instr.c
+            )
+        elif instr.op == "BUILD_LIST":
+            new_instr = Instr(
+                "BUILD_LIST",
+                rewrite_operand(instr.a)
             )
         else:
             new_instr = Instr(
@@ -1808,6 +1875,9 @@ class VM:
                     continue
                 else:
                     break
+            elif op == "BUILD_LIST":
+                arg_regs = getattr(instr, "arg_regs", [])
+                self.regs[a.id] = [self.regs[r.id] for r in arg_regs]
             elif op == "LABEL":
                 pass
             elif op == "JUMP":
@@ -1882,7 +1952,7 @@ class Analyser():
             if func_name in BUILTINS:
                 for arg in node.args:
                     self.analyse(arg)
-                return None
+                return UNKNOWN
             func_name = node.func.id
             if not self.symbols.exists(func_name):
                 suggestion = self.symbols.closest_match(func_name)
@@ -2024,6 +2094,13 @@ class Analyser():
             self.symbols.define(node.target.id, NUMBER)
             for stmt in node.body:
                 self.analyse(stmt)
+        elif isinstance(node, List):
+            element_types = [self.analyse(element) for element in node.elements]
+            if element_types and all(t == element_types[0] for t in element_types):
+                node.inferred_type = ListType(element_types[0])
+                return ListType(element_types[0])
+            node.inferred_type = ListType(UNKNOWN)
+            return ListType(UNKNOWN)
         else:
             return None
 
@@ -2082,6 +2159,8 @@ from typing import Tuple, ClassVar
 class Type:
     name: ClassVar[str]
     def is_compatible(self, other: "Type") -> bool:
+        if isinstance(other, UnknownType):
+            return True
         return self == other
     def supports_binary(self, op: str, other: "Type") -> bool:
         return False

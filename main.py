@@ -42,7 +42,21 @@ fn check(a) {
 }
 
 result = check(2)
-println(result.upper())
+
+i = 0
+while i < result.len() {
+    print(result.at(i).lower())
+    i = i + 1
+}
+
+println()
+
+nums = [1, 2, 3, 4, 5]
+i = 0
+while i < nums.len() {
+    print(nums.at(i))
+    i = i + 1
+}
 """
 num_regs = 1024
 start = time()
@@ -117,12 +131,20 @@ except Exception as e:
 
 # timeline for additions
 #DONE better errors (lineno / badline)
-#     levenshtein "error: did you mean '...'?"
+#DONE levenshtein "error: did you mean '...'?"
 #     real types
-#     structs + dot notation
+#     structs
+#DONE dot notation
 #     gc
 #     module system
 #     decent optimiser
 #     better backend (x86-64)
 #     bytecode + vm backend (its never too late to back down btw)
 #     self-hosting
+
+# further additions to my pain
+#     test suite
+#DONE list / arrays
+#     multiple return values
+#     error messages through vm
+#     proper call frame model instead of copying vars every call

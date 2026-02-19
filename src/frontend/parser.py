@@ -1,3 +1,4 @@
+from src.frontend.token_maps import CMP_TOK_TO_STR
 from src.frontend.token_types import *
 from src.frontend.ast_nodes import *
 from src.frontend.token import Token
@@ -164,6 +165,34 @@ class Parser():
                 column=tok.column
             )
         
+        elif tok.type == TokenType.LBRACKET:
+            self.advance()
+            elements = []
+            
+            if self.current_token.type != TokenType.RBRACKET:
+                while True:
+                    elements.append(self.parse_expr())
+                    
+                    if self.current_token.type == TokenType.COMMA:
+                        self.advance()
+                    
+                    elif self.current_token.type == TokenType.RBRACKET:
+                        break
+                    
+                    else:
+                        raise ParseError(
+                            message="Expected ',' or ']' in list literal",
+                            line=self.current_token.line,
+                            column=self.current_token.column
+                        )
+            
+            self.advance()
+            node = List(
+                elements=elements,
+                line=tok.line,
+                column=tok.column
+            )
+        
         else:
             raise ParseError(
                 message=f"Unexpected token: {tok}",
@@ -243,14 +272,7 @@ class Parser():
             TokenType.GREATER, TokenType.LE, TokenType.GE
         ):
             # Store string operator instead of TokenType
-            op_str = {
-                TokenType.EE: "==",
-                TokenType.NE: "!=",
-                TokenType.LESS: "<",
-                TokenType.GREATER: ">",
-                TokenType.LE: "<=",
-                TokenType.GE: ">=",
-            }[self.current_token.type]
+            op_str = CMP_TOK_TO_STR[self.current_token.type]
             ops.append(op_str)
             self.advance()
             comparators.append(self.parse_binop())
@@ -258,7 +280,7 @@ class Parser():
         if ops:
             return Compare(
                 left=left,
-                op=ops,
+                ops=ops,
                 comparators=comparators,
                 line=comparision_token.line,
                 column=comparision_token.column
@@ -665,16 +687,6 @@ class Parser():
             for comp in node.comparators:
                 self.dump(comp, indent + 1)
         
-        elif isinstance(node, FunctionDef):
-            print(f"{pad}FunctionDef({node.name})")
-            print(f"{pad}  Args:")
-            for arg in node.args:
-                print(f"{pad}   {arg}")
-            
-            print(f"{pad}  Body:")
-            for stmt in node.body:
-                self.dump(stmt, indent + 2)
-        
         elif isinstance(node, While):
             print(f"{pad}While")
             self.dump(node.test, indent + 1)
@@ -697,10 +709,25 @@ class Parser():
             for stmt in node:
                 self.dump(stmt, indent + 1)
         
+        elif isinstance(node, FunctionDef):
+            print(f"{pad}FunctionDef({node.name})")
+            print(f"{pad}  Args:")
+            for arg in node.args:
+                print(f"{pad}   {arg}")
+            
+            print(f"{pad}  Body:")
+            for stmt in node.body:
+                self.dump(stmt, indent + 2)
+        
         elif isinstance(node, Return):
             print(f"{pad}Return")
             if node.value:
                 self.dump(node.value, indent + 1)
+        
+        elif isinstance(node, List):
+            print(f"{pad}List")
+            for element in node.elements:
+                self.dump(element, indent + 1)
         
         else:
             print(f"{pad}{node}")

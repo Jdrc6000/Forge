@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import List, Optional, Any, Union, Tuple
+from typing import List as TypingList, Optional, Any, Union, Tuple
 
 @dataclass
 class AST:
@@ -7,13 +7,13 @@ class AST:
 
 @dataclass
 class Module(AST):
-    body: List[AST]
+    body: TypingList[AST]
     line: int = 0
     column: int = 0
 
 @dataclass
 class Block(AST):
-    statements: List[AST]
+    statements: TypingList[AST]
     line: int = 0
     column: int = 0
     
@@ -23,7 +23,7 @@ class Block(AST):
 @dataclass
 class Call(AST):
     func: AST
-    args: List[AST]
+    args: TypingList[AST]
     line: int = 0
     column: int = 0
 
@@ -78,16 +78,16 @@ class If(AST):
 @dataclass
 class Compare(AST):
     left: AST
-    ops: list[str]
-    comparators: List[AST]
+    ops: TypingList[str]
+    comparators: TypingList[AST]
     line: int = 0
     column: int = 0
 
 @dataclass
 class FunctionDef(AST):
     name: str
-    args: list[str]
-    body: list[AST]
+    args: TypingList[str]
+    body: TypingList[AST]
     line: int = 0
     column: int = 0
 
@@ -100,7 +100,7 @@ class Return(AST):
 @dataclass
 class While(AST):
     test: AST
-    body: list[AST]
+    body: TypingList[AST]
     line: int = 0
     column: int = 0
 
@@ -109,7 +109,13 @@ class For(AST):
     target: Name
     start: AST
     end: AST
-    body: list[AST]
+    body: TypingList[AST]
+    line: int = 0
+    column: int = 0
+
+@dataclass
+class List(AST):
+    elements: TypingList[AST]
     line: int = 0
     column: int = 0
 
@@ -124,6 +130,6 @@ class Attribute(AST):
 class MethodCall(AST):
     obj: AST
     method: str
-    args: List[AST]
+    args: TypingList[AST]
     line: int = 0
     column: int = 0
