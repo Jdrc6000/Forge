@@ -3,8 +3,9 @@ source /.venv/bin/activate
 python -m pytest tests/test_suite.py -v
 
 ai wrote this (theres no way im writing all of this myself... waste of my time)
-its 1k+ LOC so its not included in vibe-coded.txt
+its 982 LOC so its not included in vibe-coded.txt
 """
+# this will be resolved when ran inside a venv
 import pytest
 import sys
 import os

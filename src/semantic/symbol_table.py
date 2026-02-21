@@ -15,7 +15,7 @@ def levenshtein(a: str, b: str) -> int:
     
     return prev[-1]
 
-class SymbolTable():
+class SymbolTable:
     def __init__(self):
         self.scopes = [{}]  # stack of scopes
     

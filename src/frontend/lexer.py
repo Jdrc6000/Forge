@@ -3,7 +3,7 @@ from src.frontend.token import Token
 from src.frontend.token_types import *
 from src.exceptions import *
 
-class Lexer():
+class Lexer:
     def __init__(self, text):
         self.text = text
         self.line = 1
@@ -47,7 +47,7 @@ class Lexer():
                 # Critical: if this is the first dot, peek ahead
                 if dot_count == 1:
                     next_char = self.peek()
-                    # If we see . followed by another . → do NOT consume this dot as part of number
+                    # If we see . followed by another . do NOT consume this dot as part of number
                     if next_char == ".":
                         break  # leave the .. for the range rule
                     # Optional: also block trailing dot with no digit after (like 42.)

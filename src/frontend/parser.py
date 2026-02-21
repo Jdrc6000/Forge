@@ -4,7 +4,7 @@ from src.frontend.ast_nodes import *
 from src.frontend.token import Token
 from src.exceptions import *
 
-class Parser():
+class Parser:
     def __init__(self, tokens):
         self.tokens = tokens
         self.pos = 0
@@ -60,10 +60,7 @@ class Parser():
         return Module(body)
     
     def statement(self):
-        if self.current_token.type == TokenType.PRINT:
-            return self.parse_print()
-        
-        elif self.current_token.type == TokenType.LBRACE:
+        if self.current_token.type == TokenType.LBRACE:
             return self.parse_block()
         
         elif self.current_token.type == TokenType.IF:
@@ -380,7 +377,12 @@ class Parser():
         
         if tok.type in (TokenType.PLUS, TokenType.MINUS):
             self.advance()
-            return UnOp(op=self.token_to_op(tok), operand=self.parse_unary())
+            return UnOp(
+                op=self.token_to_op(tok),
+                operand=self.parse_unary(),
+                line=tok.line,
+                column=tok.column
+            )
         
         elif tok.type == TokenType.NOT:
             self.advance()
