@@ -107,7 +107,7 @@ class VM:
                 
                 else:
                     # saves ip, vars, and dest reg
-                    self.call_stack.append((self.ip + 1, self.vars.copy(), b))
+                    self.call_stack.append((self.ip + 1, self.vars.copy(), c))
                     
                     target_ip = self.find_label(a)
                     self.ip = target_ip

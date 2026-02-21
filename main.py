@@ -31,9 +31,15 @@ def token_length(token):
     return 1
 
 code = """
-a = 4
-b = 2
-println(a)
+fn num1(add) {
+    return 5 + add
+}
+
+fn num2(add) {
+    return 5 + add
+}
+
+println(num1(5) + num2(5))
 """
 num_regs = 1024
 start = time()
@@ -103,7 +109,7 @@ except RuntimeError as e:
         line=e.line or 1,
         column=e.column or 1,
         message=e.message,
-        highlight_length=token_length(e.token)
+        highlight_length=token_length(getattr(e, 'token', None))
     ))
     exit(1)
 

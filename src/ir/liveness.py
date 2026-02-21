@@ -85,4 +85,7 @@ def remove_unreachable(cfg: CFG):
         for s in bb.succs:
             q.append(s)
     
-    cfg.blocks = [bb for bb in cfg.blocks if bb.id in visited]
+    cfg.blocks = [
+        bb for bb in cfg.blocks 
+        if bb.id in visited or (bb.instrs and bb.instrs[0].op == "LABEL")
+    ]
