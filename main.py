@@ -5,6 +5,7 @@ from src.frontend.parser import Parser
 from src.semantic.analyser import Analyser, SymbolTable
 from src.optimiser.optimiser import Optimiser
 from src.ir.generator import IRGenerator
+from src.ir.cfg_builder import build_cfg
 from src.runtime.regalloc import linear_scan_allocate
 from src.runtime.vm import VM
 
@@ -29,13 +30,8 @@ def token_length(token):
     return 1
 
 code = """
-i = 0
-while i < 10 {
-    i = i + 1
-    if i == 3 { continue }
-    if i == 7 { break }
-    println(i)
-}
+a = 4
+print(a)
 """
 num_regs = 1024
 start = time()
@@ -60,6 +56,9 @@ try:
     ir_generator = IRGenerator()
     ir_generator.generate(tree)
     ir_generator.ir.dump()
+    
+    cfg = build_cfg(ir_generator.ir.code)
+    cfg.dump()
 
     allocated = linear_scan_allocate(ir_generator.ir.code, num_regs=num_regs)
 

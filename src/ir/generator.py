@@ -25,7 +25,7 @@ class IRGenerator:
         jmp = len(self.ir.code)
         self.ir.emit("JUMP", None)
 
-        # then generate function definitions
+        # generate function definitions
         for stmt in node.body:
             if isinstance(stmt, FunctionDef):
                 self.generate(stmt)
