@@ -21,7 +21,13 @@ class CFG:
         src.succs.append(dst)
         dst.preds.append(src)
     
-    # once again, we are blessed with another dump function
+    def flatten(self):
+        code = []
+        for bb in self.blocks:
+            code.extend(bb.instrs)
+        return code
+    
+    # we are blessed with another dump function once again!!
     def dump(self):
         for bb in self.blocks:
             print(f"\nBB{bb.id}")

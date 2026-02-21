@@ -1,7 +1,7 @@
 from typing import Dict, Callable, List, TYPE_CHECKING
 from src.ir.operands import Reg
 
-if TYPE_CHECKING:
+if TYPE_CHECKING: # what?
     from .vm import VM
 
 class Builtin:
@@ -9,7 +9,7 @@ class Builtin:
         self.name = name
         self.func = func
         self.min_args = min_args
-        self.max_args = max_args or min_args
+        self.max_args = max_args if max_args is not None else min_args
 
     def __call__(self, vm: VM, arg_regs: List[Reg]):
         args = [vm.regs[r.id] for r in arg_regs]

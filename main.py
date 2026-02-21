@@ -6,6 +6,7 @@ from src.semantic.analyser import Analyser, SymbolTable
 from src.optimiser.optimiser import Optimiser
 from src.ir.generator import IRGenerator
 from src.ir.cfg_builder import build_cfg
+from src.ir.liveness import compute_liveness, eliminate_dead_stores, remove_unreachable
 from src.runtime.regalloc import linear_scan_allocate
 from src.runtime.vm import VM
 
@@ -31,7 +32,8 @@ def token_length(token):
 
 code = """
 a = 4
-print(a)
+b = 2
+println(a)
 """
 num_regs = 1024
 start = time()
@@ -59,8 +61,13 @@ try:
     
     cfg = build_cfg(ir_generator.ir.code)
     cfg.dump()
+    remove_unreachable(cfg) # first
+    compute_liveness(cfg) # second
+    eliminate_dead_stores(cfg) # third
+    cfg.dump()
 
-    allocated = linear_scan_allocate(ir_generator.ir.code, num_regs=num_regs)
+    flat_code = cfg.flatten()
+    allocated = linear_scan_allocate(flat_code, num_regs=num_regs)
 
     for i, instr in enumerate(allocated):
         print(f"realloc{i} {instr.op} {fmt(instr.a)} {fmt(instr.b)} {fmt(instr.c)}") #:04 to pad to 4 0's

@@ -62,7 +62,7 @@ class IRGenerator:
         else:
             arg_regs = [self.generate(a) for a in node.args]
             dest = self.ir.new_reg()
-            instr = Instr("CALL", node.func.id, dest)
+            instr = Instr("CALL", node.func.id, None, dest)
             instr.arg_regs = arg_regs
             instr.param_names = []  # will be resolved at runtime from FunctionDef label
             self.ir.code.append(instr)
