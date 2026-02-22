@@ -200,12 +200,16 @@ def linear_scan_allocate(code, num_regs):
             )
         
         # Carry over CALL/LABEL metadata, rewriting virtual regs in arg_regs
-        if hasattr(instr, 'arg_regs'):
+        if hasattr(instr, "arg_regs"):
             new_instr.arg_regs = [rewrite_operand(r) for r in instr.arg_regs]
-        if hasattr(instr, 'param_names'):
+        if hasattr(instr, "param_names"):
             new_instr.param_names = instr.param_names
-        if hasattr(instr, 'fields'):
+        if hasattr(instr, "fields"):
             new_instr.fields = instr.fields
+        if hasattr(instr, "struct_names"):
+            new_instr.struct_names = instr.struct_names
+        if hasattr(instr, "methods"):
+            new_instr.methods = instr.methods
 
         new_code.append(new_instr)
 

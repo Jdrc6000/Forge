@@ -57,7 +57,7 @@ class VM:
                 }
             
             elif instr.op == "LABEL":
-                if getattr(instr, "struct_name", None) is not None:
+                if getattr(instr, "struct_names", None) is not None:
                     self.struct_methods[instr.a] = i
         
         while self.ip < len(code):
@@ -213,7 +213,7 @@ class VM:
             
             elif op == "LABEL":
                 if getattr(instr, "struct_names", None) is not None:
-                    self.struct_methods[instr.a] = 1
+                    self.struct_methods[instr.a] = self.ip
             
             elif op == "JUMP":
                 self.ip = a

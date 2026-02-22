@@ -84,7 +84,7 @@ class IRGenerator:
     def gen_Name(self, node):
         if self.current_struct_fields and node.id in self.current_struct_fields:
             self_reg = self.ir.new_reg()
-            self.ir.emit("LOD_VAR", self_reg, "self")
+            self.ir.emit("LOAD_VAR", self_reg, "self")
             dest = self.ir.new_reg()
             instr = Instr("GET_ATTR", dest, self_reg, node.id)
             self.ir.code.append(instr)
