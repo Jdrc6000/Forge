@@ -31,15 +31,10 @@ def token_length(token):
     return 1
 
 code = """
-fn num1(add) {
-    return 5 + add
-}
-
-fn num2(add) {
-    return 5 + add
-}
-
-println(num1(5) + num2(5))
+struct Point { x, y }
+p = Point(3, 4)
+println(p.x)
+println(p.y)
 """
 num_regs = 1024
 start = time()

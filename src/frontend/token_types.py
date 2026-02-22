@@ -34,6 +34,7 @@ class TokenType(Enum):
     RANGE = auto()
     BREAK = auto()
     CONTINUE = auto()
+    STRUCT = auto()
     
     AND = auto()
     OR = auto()

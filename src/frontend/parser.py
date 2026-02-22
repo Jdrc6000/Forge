@@ -95,6 +95,9 @@ class Parser:
         
         elif self.current_token.type == TokenType.RETURN:
             return self.parse_return()
+
+        elif self.current_token.type == TokenType.STRUCT:
+            return self.parse_struct()
         
         elif self.current_token.type == TokenType.BREAK:
             tok = self.current_token
@@ -624,6 +627,60 @@ class Parser:
             column=block_token.column
         )
     
+    def parse_struct(self):
+        struct_token = self.current_token
+        
+        self.advance()
+        if self.current_token.type != TokenType.NAME:
+            raise ParseError(
+                message="Expected struct name",
+                line=self.current_token.line,
+                column=self.current_token.column
+            )
+        name = self.current_token.value
+        self.advance()
+        
+        if self.current_token.type != TokenType.LBRACE:
+            raise ParseError(
+                message="Expected struct name",
+                line=self.current_token.line,
+                column=self.current_token.column
+            )
+        self.advance()
+        
+        fields = []
+        while self.current_token.type != TokenType.RBRACE:
+            if self.current_token.type != TokenType.NAME:
+                raise ParseError(
+                    message="Expected field name",
+                    line=self.current_token.line,
+                    column=self.current_token.column
+                )
+            
+            fields.append(self.current_token.value)
+            self.advance()
+            
+            if self.current_token.type == TokenType.COMMA:
+                self.advance()
+            
+            elif self.current_token.type == TokenType.RBRACE:
+                break
+            
+            else:
+                raise ParseError(
+                    message="Expected ',' or '}' in struct fields",
+                    line=self.current_token.line,
+                    column=self.current_token.column
+                )
+        
+        self.advance()
+        return StructDef(
+            name=name,
+            fields=fields,
+            line=struct_token.line,
+            column=struct_token.column
+        )
+    
     def token_to_op(self, token):
         mapping = {
             TokenType.PLUS: "+",
@@ -751,6 +808,11 @@ class Parser:
             print(f"{pad}List")
             for element in node.elements:
                 self.dump(element, indent + 1)
+        
+        elif isinstance(node, StructDef):
+            print(f"{pad}StructDef({node.name}")
+            for f in node.fields:
+                print(f"{pad}  field: {f}")
         
         else:
             print(f"{pad}{node}")

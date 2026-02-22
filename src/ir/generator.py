@@ -18,6 +18,11 @@ class IRGenerator:
         
         # first generate top-level statements
         for stmt in node.body:
+            if isinstance(stmt, StructDef):
+                instr = Instr("STRUCT_DEF", stmt.name)
+                instr.fields = stmt.fields
+                self.ir.code.append(instr)
+            
             if not isinstance(stmt, FunctionDef):
                 self.generate(stmt)
 
@@ -123,7 +128,7 @@ class IRGenerator:
     # honestly tho, i havent a clue whats going on, but all i know is that you can now do:
     #   a < b < c
     def gen_Compare(self, node):
-        # We generate:   result = left op1 comp[0]  AND  comp[0] op2 comp[1]  AND ...
+        # We generate:   result = left op1 comp[0] AND comp[0] op2 comp[1] AND ...
         left_reg = self.generate(node.left)
         result_reg = self.ir.new_reg()
         self.ir.emit("LOAD_CONST", result_reg, Imm(True)) # start assuming true
@@ -296,3 +301,14 @@ class IRGenerator:
         patch_index = len(self.ir.code)
         self.ir.emit("JUMP", None)
         self.loop_stack[-1][0].append(patch_index)
+    
+    def gen_StructDef(self, node):
+        pass # purely compile-time, nothing to emit
+    
+    def gen_StructLiteral(self, node):
+        arg_regs = [self.generate(a) for a in node.args]
+        dest = self.ir.new_reg()
+        instr = Instr("BUILD_STRUCT", dest, node.name)
+        instr.arg_regs = arg_regs
+        self.ir.code.append(instr)
+        return dest

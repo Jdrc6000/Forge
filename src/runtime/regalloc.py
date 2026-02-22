@@ -74,6 +74,13 @@ def get_defs_uses(instr):
         uses = instr.arg_regs if hasattr(instr, "arg_regs") else []
         return [instr.a], uses
 
+    elif instr.op == "BUILD_STRUCT":
+        uses = instr.arg_regs if hasattr(instr, "arg_regs") else []
+        return [instr.a], uses
+    
+    elif instr.op == "STRUCT_DEF":
+        return [], []
+
     else:
         print(f"Warning: unknown op in regalloc: {instr.op}")
         return [], []
@@ -177,10 +184,11 @@ def linear_scan_allocate(code, num_regs):
                 instr.c # REFRAIN FROM REWRITING AT ALL TIMES, DOING SO WILL DISTRUPT THE COSMIC ENERGY OF THE UNIVERSE AND OBLITERATE EVERYTHING (only cuz its the attr/method name)
             )
         
-        elif instr.op == "BUILD_LIST":
+        elif instr.op in ("BUILD_LIST", "BUILD_STRUCT"):
             new_instr = Instr(
-                "BUILD_LIST",
-                rewrite_operand(instr.a)
+                instr.op,
+                rewrite_operand(instr.a),
+                instr.b
             )
         
         else:
@@ -196,6 +204,8 @@ def linear_scan_allocate(code, num_regs):
             new_instr.arg_regs = [rewrite_operand(r) for r in instr.arg_regs]
         if hasattr(instr, 'param_names'):
             new_instr.param_names = instr.param_names
+        if hasattr(instr, 'fields'):
+            new_instr.fields = instr.fields
 
         new_code.append(new_instr)
 

@@ -43,6 +43,7 @@ class VM:
     
     def run(self, code):
         self.code = code
+        self.structs = {}
         
         while self.ip < len(code):
             instr = code[self.ip]
@@ -61,15 +62,25 @@ class VM:
                 obj = self.regs[b.id]
                 attr_name = c
                 
-                try:
-                    handler = resolve_member(obj, attr_name)
-                    self.regs[a.id] = handler(obj, [])
+                if isinstance(obj, dict):
+                    if attr_name not in obj:
+                        raise RuntimeError(
+                            message=f"Struct has no field '{attr_name}'",
+                            ip=self.ip
+                        )
+                    
+                    self.regs[a.id] = obj[attr_name]
                 
-                except AttributeError as e:
-                    raise RuntimeError(
-                        message=str(e),
-                        ip=self.ip
-                    )
+                else:
+                    try:
+                        handler = resolve_member(obj, attr_name)
+                        self.regs[a.id] = handler(obj, [])
+                    
+                    except AttributeError as e:
+                        raise RuntimeError(
+                            message=str(e),
+                            ip=self.ip
+                        )
             
             elif op == "CALL_METHOD":
                 
@@ -150,6 +161,21 @@ class VM:
             elif op == "BUILD_LIST":
                 arg_regs = getattr(instr, "arg_regs", [])
                 self.regs[a.id] = [self.regs[r.id] for r in arg_regs]
+            
+            elif op == "BUILD_STRUCT":
+                # workes alongside `STRUCT_DEF` below
+                arg_regs = getattr(instr, "arg_regs", [])
+                struct_name = b
+                fields = self.structs.get(struct_name, [])
+                obj = {"__type__": struct_name}
+                
+                for field, reg in zip(fields, arg_regs):
+                    obj[field] = self.regs[reg.id]
+                
+                self.regs[a.id] = obj
+            
+            elif op == "STRUCT_DEF":
+                self.structs[instr.a] = getattr(instr, "fields", [])
             
             elif op == "LABEL":
                 # its literally just a label...

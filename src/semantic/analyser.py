@@ -30,7 +30,22 @@ class Analyser:
                     self.analyse(arg)
                 return UNKNOWN
             
-            func_name = node.func.id
+            # check if its a struct constructor
+            if self.symbols.exists(func_name):
+                sym = self.symbols.get(func_name)
+                if sym["type"] == "struct":
+                    if len(node.args) != sym["field_count"]:
+                        raise TypeError(
+                            message=f"Struct '{func_name}' has {sym["field_count"]} fields, got {len(node.args)}",
+                            token=node.func
+                        )
+                    
+                    for arg in node.args:
+                        self.analyse(arg)
+                    
+                    node.__class__ = StructLiteral
+                    node.name = func_name
+                    return UNKNOWN
             
             if not self.symbols.exists(func_name):
                 suggestion = self.symbols.closest_match(func_name)
@@ -242,6 +257,13 @@ class Analyser:
             
             node.inferred_type = ListType(UNKNOWN)
             return ListType(UNKNOWN)
+        
+        elif isinstance(node, StructDef):
+            self.symbols.define(node.name, {
+                "type": "struct",
+                "fields": node.fields,
+                "field_count": len(node.fields)
+            })
         
         else:
             return None

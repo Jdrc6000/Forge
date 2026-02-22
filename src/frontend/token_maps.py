@@ -15,6 +15,7 @@ KEYWORDS = {
     "in": TokenType.IN,
     "break": TokenType.BREAK,
     "continue": TokenType.CONTINUE,
+    "struct": TokenType.STRUCT,
     
     "fn": TokenType.FN,
     "return": TokenType.RETURN,

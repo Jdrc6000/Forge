@@ -147,3 +147,17 @@ class MethodCall(AST):
     args: TypingList[AST]
     line: int = 0
     column: int = 0
+
+@dataclass
+class StructDef(AST):
+    name: str
+    fields: TypingList[str]
+    line: int = 0
+    column: int = 0
+
+@dataclass
+class StructLiteral(AST):
+    name: str
+    args: TypingList[AST]
+    line: int = 0
+    column: int = 0
