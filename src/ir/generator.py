@@ -8,6 +8,36 @@ class IRGenerator:
     def __init__(self):
         self.ir = IR()
         self.loop_stack = [] # [continue_ip, [break_patch_indicies]]
+        self.current_struct_fields = None
+    
+    def _gen_struct_method(self, struct_name, method_node):
+        label = f"{struct_name}.{method_node.name}"
+        instr = Instr("LABEL", label)
+        args = list(method_node.args)
+        if not args or args[0] != "self":
+            args = ["self"] + args
+        instr.param_names = args
+        instr.struct_names = struct_name
+        self.ir.code.append(instr)
+        
+        struct_fields = None
+        for i in self.ir.code:
+            if i.op == "STRUCT_DEF" and i.a == struct_name:
+                struct_fields = getattr(i, "fields", [])
+                break
+        
+        old_fields = self.current_struct_fields
+        self.current_struct_fields = struct_fields or []
+        
+        stmts = method_node.body.statements if isinstance(method_node.body, Block) else method_node.body
+        for stmt in stmts:
+            self.generate(stmt)
+        
+        self.current_struct_fields = old_fields
+        
+        default_reg = self.ir.new_reg()
+        self.ir.emit("LOAD_CONST", default_reg, Imm(0))
+        self.ir.emit("RETURN", default_reg)
     
     def generate(self, node):
         method = f"gen_{type(node).__name__}"
@@ -21,6 +51,7 @@ class IRGenerator:
             if isinstance(stmt, StructDef):
                 instr = Instr("STRUCT_DEF", stmt.name)
                 instr.fields = stmt.fields
+                instr.methods = [m.name for m in stmt.methods]
                 self.ir.code.append(instr)
             
             if not isinstance(stmt, FunctionDef):
@@ -34,6 +65,10 @@ class IRGenerator:
         for stmt in node.body:
             if isinstance(stmt, FunctionDef):
                 self.generate(stmt)
+            
+            elif isinstance(stmt, StructDef):
+                for method in stmt.methods:
+                    self._gen_struct_method(stmt.name, method)
         
         # patch the jump to land here (after all functions)
         self.ir.code[jmp].a = len(self.ir.code)
@@ -47,6 +82,14 @@ class IRGenerator:
         return r
     
     def gen_Name(self, node):
+        if self.current_struct_fields and node.id in self.current_struct_fields:
+            self_reg = self.ir.new_reg()
+            self.ir.emit("LOD_VAR", self_reg, "self")
+            dest = self.ir.new_reg()
+            instr = Instr("GET_ATTR", dest, self_reg, node.id)
+            self.ir.code.append(instr)
+            return dest
+        
         r = self.ir.new_reg()
         self.ir.emit("LOAD_VAR", r, node.id)
         return r

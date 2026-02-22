@@ -31,7 +31,10 @@ def token_length(token):
     return 1
 
 code = """
-struct Point { x, y }
+struct Point {
+    x,
+    y
+}
 p = Point(3, 4)
 println(p.x)
 println(p.y)

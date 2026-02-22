@@ -152,8 +152,13 @@ class MethodCall(AST):
 class StructDef(AST):
     name: str
     fields: TypingList[str]
+    methods: TypingList["FunctionDef"] = None
     line: int = 0
     column: int = 0
+    
+    def __post_init__(self):
+        if self.methods is None:
+            self.methods = []
 
 @dataclass
 class StructLiteral(AST):

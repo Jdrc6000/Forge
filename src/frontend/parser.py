@@ -649,26 +649,30 @@ class Parser:
         self.advance()
         
         fields = []
+        methods = []
         while self.current_token.type != TokenType.RBRACE:
-            if self.current_token.type != TokenType.NAME:
-                raise ParseError(
-                    message="Expected field name",
-                    line=self.current_token.line,
-                    column=self.current_token.column
-                )
+            if self.current_token.type == TokenType.FN:
+                methods.append(self.parse_function())
             
-            fields.append(self.current_token.value)
-            self.advance()
-            
-            if self.current_token.type == TokenType.COMMA:
+            elif self.current_token.type == TokenType.NAME:
+                fields.append(self.current_token.value)
                 self.advance()
-            
-            elif self.current_token.type == TokenType.RBRACE:
-                break
+                if self.current_token.type == TokenType.COMMA:
+                    self.advance()
+                
+                elif self.current_token.type in (TokenType.RBRACE, TokenType.FN):
+                    pass
+                
+                else:
+                    raise ParseError(
+                        message="Expected ',' or '}' in struct fields",
+                        line=self.current_token.line,
+                        column=self.current_token.column
+                    )
             
             else:
                 raise ParseError(
-                    message="Expected ',' or '}' in struct fields",
+                    message="Expected field name or method definition",
                     line=self.current_token.line,
                     column=self.current_token.column
                 )
@@ -677,6 +681,7 @@ class Parser:
         return StructDef(
             name=name,
             fields=fields,
+            methods=methods,
             line=struct_token.line,
             column=struct_token.column
         )

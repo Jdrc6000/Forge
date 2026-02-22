@@ -16,6 +16,7 @@ class Analyser:
     def __init__(self, symbols):
         self.symbols: SymbolTable = symbols
         self.current_function = None
+        self.current_struct_fields = None
         self.loop_depth = 0
     
     def analyse(self, node):
@@ -96,6 +97,9 @@ class Analyser:
         
         elif isinstance(node, Name):
             if not self.symbols.exists(node.id):
+                if self.current_struct_fields and node.id in self.current_struct_fields:
+                    return UNKNOWN
+                
                 suggestion = self.symbols.closest_match(node.id)
                 hint = f" Did you mean '{suggestion}'?" if suggestion else ""
                 raise UndefinedVariableError(
@@ -262,8 +266,25 @@ class Analyser:
             self.symbols.define(node.name, {
                 "type": "struct",
                 "fields": node.fields,
-                "field_count": len(node.fields)
+                "field_count": len(node.fields),
+                "methods": [m.name for m in node.methods]
             })
+            
+            for method in node.methods:
+                self.symbols.enter_scope()
+                self.symbols.define("self", UNKNOWN)
+                for arg in method.args:
+                    self.symbols.define(arg, UNKNOWN)
+                old_fn = self.current_function
+                old_fields = self.current_struct_fields
+                self.current_function = method
+                self.current_struct_fields = node.fields
+                stmts = method.body.statements if hasattr(method.body, "statements") else method.body
+                for stmt in stmts:
+                    self.analyse(stmt)
+                self.current_function = old_fn
+                self.current_struct_fields = old_fields
+                self.symbols.exit_scope()
         
         else:
             return None

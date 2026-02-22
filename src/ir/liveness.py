@@ -89,3 +89,8 @@ def remove_unreachable(cfg: CFG):
         bb for bb in cfg.blocks 
         if bb.id in visited or (bb.instrs and bb.instrs[0].op == "LABEL")
     ]
+    
+    surviving_ids = {bb.id for bb in cfg.blocks}
+    for bb in cfg.blocks:
+        bb.succs = [s for s in bb.succs if s.id in surviving_ids]
+        bb.preds = [p for p in bb.preds if p.id in surviving_ids]

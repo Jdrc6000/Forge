@@ -19,6 +19,9 @@ class VM:
         self.ip = 0 # instruction pointer
         
         self.builtins = BUILTINS
+        
+        self.structs = {}
+        self.struct_methods = {}
     
     def dump_regs(self): # simple dump debugger
         print(f"used regs: {len([reg for reg in self.regs if reg is not None])}")
@@ -44,6 +47,18 @@ class VM:
     def run(self, code):
         self.code = code
         self.structs = {}
+        self.struct_methods = {}
+        
+        for i, instr in enumerate(code):
+            if instr.op == "STRUCT_DEF":
+                self.struct_methods[instr.a] = {
+                    "fields": getattr(instr, "fields", []),
+                    "methods": getattr(instr, "methods", [])
+                }
+            
+            elif instr.op == "LABEL":
+                if getattr(instr, "struct_name", None) is not None:
+                    self.struct_methods[instr.a] = i
         
         while self.ip < len(code):
             instr = code[self.ip]
@@ -83,11 +98,29 @@ class VM:
                         )
             
             elif op == "CALL_METHOD":
-                
                 obj = self.regs[b.id]
                 method_name = c
                 arg_regs = getattr(instr, "arg_regs", [])
                 args = [self.regs[r.id] for r in arg_regs]
+                
+                if isinstance(obj, dict) and "__type__" in obj:
+                    struct_type = obj["__type__"]
+                    full_name = f"{struct_type}.{method_name}"
+                    
+                    if full_name in self.struct_methods:
+                        target_ip = self.struct_methods[full_name]
+                        self.call_stack.append((self.ip + 1, self.vars.copy(), a))
+                        self.ip = target_ip
+                        label_instr = code[target_ip]
+                        param_names = getattr(label_instr, "param_names", [])
+                        
+                        self.vars = {}
+                        if param_names:
+                            self.vars[param_names[0]] = obj
+                            for name, val in zip(param_names[1:], args):
+                                self.vars[name] = val
+                        
+                        continue
                 
                 try:
                     handler = resolve_member(obj, method_name)
@@ -166,7 +199,8 @@ class VM:
                 # workes alongside `STRUCT_DEF` below
                 arg_regs = getattr(instr, "arg_regs", [])
                 struct_name = b
-                fields = self.structs.get(struct_name, [])
+                struct_info = self.structs.get(struct_name, {})
+                fields = struct_info["fields"] if isinstance(struct_info, dict) else struct_info
                 obj = {"__type__": struct_name}
                 
                 for field, reg in zip(fields, arg_regs):
@@ -178,9 +212,8 @@ class VM:
                 self.structs[instr.a] = getattr(instr, "fields", [])
             
             elif op == "LABEL":
-                # its literally just a label...
-                # its meant to do nothing
-                pass
+                if getattr(instr, "struct_names", None) is not None:
+                    self.struct_methods[instr.a] = 1
             
             elif op == "JUMP":
                 self.ip = a
