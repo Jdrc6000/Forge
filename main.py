@@ -41,7 +41,7 @@ struct Point {
 p = Point(3, 4)
 println(p.x)
 println(p.y)
-println(p.do_something())
+println(p.do_something(5))
 """
 num_regs = 1024
 start = time()
