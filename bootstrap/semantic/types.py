@@ -38,6 +38,7 @@ class BoolType(Type):
     def supports_binary(self, op, other):
         if op in {"and", "or"}:
             return isinstance(other, BoolType)
+        return False
 
 @dataclass(frozen=True)
 class ListType(Type):

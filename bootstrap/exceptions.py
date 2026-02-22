@@ -24,7 +24,7 @@ def format_diagnostic(
     start = max(0, column - 1 - MAX // 2)
     end = min(len(bad_line), start + MAX)
     snippet = bad_line[start:end]
-    caret_pos = (column - 1) - start
+    caret_pos = max(0, (column - 1) - start) # clamp to 0
 
     color = {
         "error": "\033[91m",    # red

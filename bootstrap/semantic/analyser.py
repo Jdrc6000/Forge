@@ -46,7 +46,7 @@ class Analyser:
                     
                     node.__class__ = StructLiteral
                     node.name = func_name
-                    return UNKNOWN
+                    return func_name
             
             if not self.symbols.exists(func_name):
                 suggestion = self.symbols.closest_match(func_name)
@@ -84,6 +84,33 @@ class Analyser:
             self.analyse(node.obj)
             for arg in node.args:
                 self.analyse(arg)
+            
+            if isinstance(node.obj, Name):
+                sym = self.symbols.get(node.obj.id)
+                
+                if sym:
+                    struct_name = sym["type"] if isinstance(sym["type"], str) else None
+                    
+                    if struct_name:
+                        struct_sym = self.symbols.get(struct_name)
+                        
+                        if struct_sym and struct_sym.get("type") == "struct":
+                            methods = struct_sym.get("methods", {})
+                            
+                            if node.method not in methods:
+                                raise UndefinedVariableError(
+                                    message=f"Struct '{struct_name}' has no method '{node.method}'",
+                                    token=node
+                                )
+                            
+                            expected = methods[node.method]
+                            actual = len(node.args)
+                            if actual != expected:
+                                raise TypeError(
+                                    message=f"Method '{node.method}' expected {expected} arg(s), got {actual}",
+                                    token=node
+                                )
+            
             return UNKNOWN
         
         # unused?
@@ -267,7 +294,7 @@ class Analyser:
                 "type": "struct",
                 "fields": node.fields,
                 "field_count": len(node.fields),
-                "methods": [m.name for m in node.methods]
+                "methods": {m.name: len(m.args) for m in node.methods}
             })
             
             for method in node.methods:

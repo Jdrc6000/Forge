@@ -56,9 +56,8 @@ class VM:
                     "methods": getattr(instr, "methods", [])
                 }
             
-            elif instr.op == "LABEL":
-                if getattr(instr, "struct_names", None) is not None:
-                    self.struct_methods[instr.a] = i
+            elif instr.op == "LABEL" and getattr(instr, "struct_names", None) is not None:
+                self.struct_methods[instr.a] = i
         
         while self.ip < len(code):
             instr = code[self.ip]
@@ -196,11 +195,10 @@ class VM:
                 self.regs[a.id] = [self.regs[r.id] for r in arg_regs]
             
             elif op == "BUILD_STRUCT":
-                # workes alongside `STRUCT_DEF` below
+                # works alongside `STRUCT_DEF` below
                 arg_regs = getattr(instr, "arg_regs", [])
                 struct_name = b
-                struct_info = self.structs.get(struct_name, {})
-                fields = struct_info["fields"] if isinstance(struct_info, dict) else struct_info
+                fields = self.structs.get(struct_name, {}).get("fields", [])
                 obj = {"__type__": struct_name}
                 
                 for field, reg in zip(fields, arg_regs):
@@ -209,7 +207,10 @@ class VM:
                 self.regs[a.id] = obj
             
             elif op == "STRUCT_DEF":
-                self.structs[instr.a] = getattr(instr, "fields", [])
+                self.structs[instr.a] = {
+                    "fields": getattr(instr, "fields", []),
+                    "methods": getattr(instr, "methods", [])
+                }
             
             elif op == "LABEL":
                 if getattr(instr, "struct_names", None) is not None:

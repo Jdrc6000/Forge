@@ -310,10 +310,10 @@ class IRGenerator:
         jmp_exit = len(self.ir.code)
         self.ir.emit("JUMP_IF_FALSE", cmp_reg, None)
         
-        self.loop_stack.append((None, []))
+        self.loop_stack.append(([], []))
         for stmt in node.body:
             self.generate(stmt)
-        _, break_patches = self.loop_stack.pop()
+        continue_patches, break_patches = self.loop_stack.pop()
 
         # Increment loop variable
         increment_ip = len(self.ir.code)
@@ -328,12 +328,11 @@ class IRGenerator:
         
         exit_ip = len(self.ir.code)
         self.ir.code[jmp_exit].b = exit_ip
+        
+        for patch in continue_patches:
+            self.ir.code[patch].a = increment_ip
         for patch in break_patches:
             self.ir.code[patch].a = exit_ip
-        
-        for i, instr in enumerate(self.ir.code):
-            if instr.op == "JUMP" and instr.a == "CONTINUE_PLACEHOLDER":
-                self.ir.code[i].a = increment_ip
     
     def gen_Break(self, node):
         patch_index = len(self.ir.code)

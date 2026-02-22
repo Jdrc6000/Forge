@@ -589,6 +589,15 @@ class Parser:
     def parse_return(self):
         return_token = self.current_token
         self.advance()  # consume 'return'
+        
+        # if it doesnt return anything, return None
+        if self.current_token.type in (TokenType.RBRACE, TokenType.EOF):
+            return Return(
+                value=None,
+                line=return_token.line,
+                column=return_token.column
+            )
+        
         value = self.parse_expr()
         return Return(
             value=value,
