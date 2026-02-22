@@ -1,8 +1,8 @@
-from src.frontend.ast_nodes import *
-from src.frontend.token_maps import *
-from src.ir.ir import IR, Instr
-from src.ir.operands import Imm
-from src.runtime.builtins_registry import BUILTINS
+from bootstrap.frontend.ast_nodes import *
+from bootstrap.frontend.token_maps import *
+from bootstrap.ir.ir import IR, Instr
+from bootstrap.ir.operands import Imm
+from bootstrap.runtime.builtins_registry import BUILTINS
 
 class IRGenerator:
     def __init__(self):

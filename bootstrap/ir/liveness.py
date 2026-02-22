@@ -1,6 +1,6 @@
-from src.ir.cfg import BasicBlock, CFG
-from src.ir.operands import Reg
-from src.runtime.regalloc import get_defs_uses
+from bootstrap.ir.cfg import BasicBlock, CFG
+from bootstrap.ir.operands import Reg
+from bootstrap.runtime.regalloc import get_defs_uses
 
 from collections import deque
 

@@ -1,17 +1,17 @@
 from time import time
 
-from src.frontend.lexer import Lexer
-from src.frontend.parser import Parser
-from src.semantic.analyser import Analyser, SymbolTable
-from src.optimiser.optimiser import Optimiser
-from src.ir.generator import IRGenerator
-from src.ir.cfg_builder import build_cfg
-from src.ir.liveness import compute_liveness, eliminate_dead_stores, remove_unreachable
-from src.runtime.regalloc import linear_scan_allocate
-from src.runtime.vm import VM
+from bootstrap.frontend.lexer import Lexer
+from bootstrap.frontend.parser import Parser
+from bootstrap.semantic.analyser import Analyser, SymbolTable
+from bootstrap.optimiser.optimiser import Optimiser
+from bootstrap.ir.generator import IRGenerator
+from bootstrap.ir.cfg_builder import build_cfg
+from bootstrap.ir.liveness import compute_liveness, eliminate_dead_stores, remove_unreachable
+from bootstrap.runtime.regalloc import linear_scan_allocate
+from bootstrap.runtime.vm import VM
 
-from src.ir.operands import Reg, Imm
-from src.exceptions import *
+from bootstrap.ir.operands import Reg, Imm
+from bootstrap.exceptions import *
 
 def fmt(x):
     if isinstance(x, Reg):

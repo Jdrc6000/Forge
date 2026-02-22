@@ -1,4 +1,4 @@
-from src.frontend.token_types import TokenType
+from bootstrap.frontend.token_types import TokenType
 
 KEYWORDS = {
     "if": TokenType.IF,

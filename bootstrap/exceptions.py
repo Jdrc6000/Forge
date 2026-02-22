@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import Optional
 
-from src.frontend.token import Token
+from bootstrap.frontend.token import Token
 
 def format_diagnostic(
     source: str,

@@ -1,8 +1,8 @@
-from src.frontend.token_maps import CMP_TOK_TO_STR
-from src.frontend.token_types import *
-from src.frontend.ast_nodes import *
-from src.frontend.token import Token
-from src.exceptions import *
+from bootstrap.frontend.token_maps import CMP_TOK_TO_STR
+from bootstrap.frontend.token_types import *
+from bootstrap.frontend.ast_nodes import *
+from bootstrap.frontend.token import Token
+from bootstrap.exceptions import *
 
 class Parser:
     def __init__(self, tokens):

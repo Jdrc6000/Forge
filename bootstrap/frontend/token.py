@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from src.frontend.token_types import TokenType
+from bootstrap.frontend.token_types import TokenType
 from typing import Any, Optional
 
 @dataclass

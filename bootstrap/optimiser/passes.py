@@ -1,4 +1,4 @@
-from src.frontend.ast_nodes import Constant, Block
+from bootstrap.frontend.ast_nodes import Constant, Block
 from dataclasses import FrozenInstanceError
 
 class Pass:

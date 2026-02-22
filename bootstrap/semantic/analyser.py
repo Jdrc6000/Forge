@@ -1,8 +1,8 @@
-from src.semantic.types import *
-from src.frontend.ast_nodes import *
-from src.semantic.symbol_table import *
-from src.exceptions import *
-from src.runtime.builtins_registry import BUILTINS
+from bootstrap.semantic.types import *
+from bootstrap.frontend.ast_nodes import *
+from bootstrap.semantic.symbol_table import *
+from bootstrap.exceptions import *
+from bootstrap.runtime.builtins_registry import BUILTINS
 
 # message for future-josh
 #  this is going to be the most confusing, awful, horrid-looking code you have ever seen,

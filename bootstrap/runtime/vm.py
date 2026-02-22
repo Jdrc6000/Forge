@@ -1,5 +1,5 @@
-from src.frontend.token_types import *
-from src.exceptions import *
+from bootstrap.frontend.token_types import *
+from bootstrap.exceptions import *
 from .builtins_registry import BUILTINS
 from .methods import resolve_member
 

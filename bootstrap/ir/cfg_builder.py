@@ -1,5 +1,5 @@
-from src.ir.cfg import BasicBlock, CFG
-from src.ir.ir import Instr
+from bootstrap.ir.cfg import BasicBlock, CFG
+from bootstrap.ir.ir import Instr
 from typing import List
 
 TERMINATORS = {"JUMP", "JUMP_IF_TRUE", "JUMP_IF_FALSE", "RETURN"}

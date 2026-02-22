@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from typing import List, Optional
-from src.ir.ir import Instr
+from bootstrap.ir.ir import Instr
 
 @dataclass
 class BasicBlock:

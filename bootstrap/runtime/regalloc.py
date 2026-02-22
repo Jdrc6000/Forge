@@ -1,5 +1,5 @@
-from src.ir.ir import Instr
-from src.ir.operands import Reg
+from bootstrap.ir.ir import Instr
+from bootstrap.ir.operands import Reg
 from collections import namedtuple
 
 # Live range structure

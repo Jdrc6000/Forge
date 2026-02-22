@@ -1,4 +1,4 @@
-from src.ir.operands import Reg, Imm
+from bootstrap.ir.operands import Reg, Imm
 from dataclasses import dataclass
 from typing import Any, List
 

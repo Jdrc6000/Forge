@@ -1,4 +1,4 @@
-from src.optimiser.passes import ConstantFolder, DeadCodeEliminator
+from bootstrap.optimiser.passes import ConstantFolder, DeadCodeEliminator
 
 class Optimiser:
     def __init__(self):

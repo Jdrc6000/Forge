@@ -1,7 +1,7 @@
-from src.frontend.token_maps import *
-from src.frontend.token import Token
-from src.frontend.token_types import *
-from src.exceptions import *
+from bootstrap.frontend.token_maps import *
+from bootstrap.frontend.token import Token
+from bootstrap.frontend.token_types import *
+from bootstrap.exceptions import *
 
 class Lexer:
     def __init__(self, text):
