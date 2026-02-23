@@ -1,4 +1,3 @@
 import { math }
 
-final = math.a + math.b
-println(final)
+println(math.div(10, 2))

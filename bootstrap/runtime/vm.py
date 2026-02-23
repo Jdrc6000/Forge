@@ -64,7 +64,7 @@ class VM:
         child_vm.code = allocated
         child_vm.ip = child_vm.find_label("__main__")
         child_vm.run(allocated)
-        return child_vm.vars
+        return child_vm.vars, allocated
     
     def dump_regs(self): # simple dump debugger
         print(f"used regs: {len([reg for reg in self.regs if reg is not None])}")
@@ -102,8 +102,8 @@ class VM:
             elif instr.op == "LABEL" and getattr(instr, "struct_names", None) is not None:
                 self.struct_methods[instr.a] = i
         
-        while self.ip < len(code):
-            instr = code[self.ip]
+        while self.ip < len(self.code):
+            instr = self.code[self.ip]
             op, a, b, c = instr.op, instr.a, instr.b, instr.c
             
             if op == "LOAD_CONST":
@@ -166,7 +166,26 @@ class VM:
                 arg_regs = getattr(instr, "arg_regs", [])
                 args = [self.regs[r.id] for r in arg_regs]
                 
-                if isinstance(obj, dict) and "__type__" in obj:
+                if isinstance(obj, _ModuleNamespace):
+                    func_val = self.vars.get(f"{obj.alias}.{method_name}")
+                    
+                    if isinstance(func_val, tuple) and func_val[0] == "__func__":
+                        target_ip = func_val[1]
+                        self.call_stack.append((self.ip + 1, self.vars.copy(), a))
+                        self.ip = target_ip
+                        label_instr = self.code[target_ip]
+                        param_names = getattr(label_instr, "param_names", [])
+                        self.vars = {}
+                        for name, val in zip(param_names, args):
+                            self.vars[name] = val
+                        continue
+                    
+                    raise RuntimeError(
+                        message=f"Module '{obj.alias}' has no function '{method_name}'",
+                        ip=self.ip
+                    )
+                
+                elif isinstance(obj, dict) and "__type__" in obj:
                     struct_type = obj["__type__"]
                     full_name = f"{struct_type}.{method_name}"
                     
@@ -174,7 +193,7 @@ class VM:
                         target_ip = self.struct_methods[full_name]
                         self.call_stack.append((self.ip + 1, self.vars.copy(), a))
                         self.ip = target_ip
-                        label_instr = code[target_ip]
+                        label_instr = self.code[target_ip]
                         param_names = getattr(label_instr, "param_names", [])
                         
                         self.vars = {}
@@ -213,15 +232,20 @@ class VM:
                         self.regs[instr.c.id] = ret
                 
                 else:
+                    func_val = self.vars.get(func_name)
+                    if isinstance(func_val, tuple) and func_val[0] == "__func__":
+                        target_ip = func_val[1]
+                    else:
+                        target_ip = self.find_label(func_name)
+                    
                     # saves ip, vars, and dest reg
                     self.call_stack.append((self.ip + 1, self.vars.copy(), c))
                     
-                    target_ip = self.find_label(a)
                     self.ip = target_ip
                     self.vars = {}
 
                     # get param names from the LABEL instruction itself
-                    label_instr = code[target_ip]
+                    label_instr = self.code[target_ip]
                     param_names = getattr(label_instr, "param_names", [])
                     arg_regs = getattr(instr, "arg_regs", [])
 
@@ -240,10 +264,34 @@ class VM:
 
             elif op == "IMPORT_MODULE":
                 alias, module_name = a, b
-                module_vars = self._compile_and_run_module(module_name)
-                
+                module_vars, module_code = self._compile_and_run_module(module_name)
                 for var_name, value in module_vars.items():
                     self.vars[f"{alias}.{var_name}"] = value
+                offset = len(self.code)
+                
+                # Patch all absolute jump targets in module_code to be offset-adjusted
+                from bootstrap.ir.ir import Instr as _Instr
+                patched_module_code = []
+                for minstr in module_code:
+                    new_instr = _Instr(minstr.op, minstr.a, minstr.b, minstr.c)
+                    
+                    for attr in ("arg_regs", "param_names", "fields", "struct_names", "methods"):
+                        if hasattr(minstr, attr):
+                            setattr(new_instr, attr, getattr(minstr, attr))
+                    
+                    if minstr.op == "JUMP" and isinstance(minstr.a, int):
+                        new_instr.a = minstr.a + offset
+                    
+                    elif minstr.op in ("JUMP_IF_TRUE", "JUMP_IF_FALSE") and isinstance(minstr.b, int):
+                        new_instr.b = minstr.b + offset
+                    
+                    patched_module_code.append(new_instr)
+                
+                self.code = self.code + patched_module_code
+                for i, minstr in enumerate(patched_module_code):
+                    if (minstr.op == "LABEL" and minstr.a != "__main__"
+                        and not getattr(minstr, "struct_names", None)):
+                        self.vars[f"{alias}.{minstr.a}"] = ("__func__", offset + i)
 
             elif op == "RETURN":
                 ret_value = None
