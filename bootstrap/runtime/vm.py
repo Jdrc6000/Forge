@@ -171,7 +171,7 @@ class VM:
                     
                     if isinstance(func_val, tuple) and func_val[0] == "__func__":
                         target_ip = func_val[1]
-                        self.call_stack.append((self.ip + 1, self.vars.copy(), a))
+                        self.call_stack.append((self.ip + 1, self.vars.copy(), self.regs[:], a))
                         self.ip = target_ip
                         label_instr = self.code[target_ip]
                         param_names = getattr(label_instr, "param_names", [])
@@ -191,7 +191,7 @@ class VM:
                     
                     if full_name in self.struct_methods:
                         target_ip = self.struct_methods[full_name]
-                        self.call_stack.append((self.ip + 1, self.vars.copy(), a))
+                        self.call_stack.append((self.ip + 1, self.vars.copy(), self.regs[:], a))
                         self.ip = target_ip
                         label_instr = self.code[target_ip]
                         param_names = getattr(label_instr, "param_names", [])
@@ -239,7 +239,7 @@ class VM:
                         target_ip = self.find_label(func_name)
                     
                     # saves ip, vars, and dest reg
-                    self.call_stack.append((self.ip + 1, self.vars.copy(), c))
+                    self.call_stack.append((self.ip + 1, self.vars.copy(), self.regs[:], c))
                     
                     self.ip = target_ip
                     self.vars = {}
@@ -299,8 +299,9 @@ class VM:
                     ret_value = self.regs[a.id]
 
                 if self.call_stack:
-                    self.ip, caller_vars, dest_reg = self.call_stack.pop()
+                    self.ip, caller_vars, saved_regs, dest_reg = self.call_stack.pop()
                     self.vars = caller_vars
+                    self.regs = saved_regs
 
                     if ret_value is not None and dest_reg is not None:
                         self.regs[dest_reg.id] = ret_value
