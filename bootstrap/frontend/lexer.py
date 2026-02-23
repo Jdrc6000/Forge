@@ -163,6 +163,10 @@ class Lexer:
                 tokens.append(Token(tok_type, line=start_line, column=start_col))
                 self.advance()
             
+            elif self.current_char == "#":
+                while self.current_char and self.current_char != "\n":
+                    self.advance()
+            
             elif self.current_char.isdigit():
                 tokens.append(self.number())
             

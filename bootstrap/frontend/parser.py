@@ -98,6 +98,9 @@ class Parser:
 
         elif self.current_token.type == TokenType.STRUCT:
             return self.parse_struct()
+
+        elif self.current_token.type == TokenType.IMPORT:
+            return self.parse_import()
         
         elif self.current_token.type == TokenType.BREAK:
             tok = self.current_token
@@ -693,6 +696,54 @@ class Parser:
             methods=methods,
             line=struct_token.line,
             column=struct_token.column
+        )
+    
+    def parse_import(self):
+        tok = self.current_token
+        self.advance()
+        if self.current_token.type != TokenType.LBRACE:
+            raise ParseError(
+                message="Expected '{' after 'import'",
+                line=self.current_token.line,
+                column=self.current_token.column
+            )
+        
+        self.advance()
+        imports = []
+        while self.current_token.type != TokenType.RBRACE:
+            if self.current_token.type != TokenType.NAME:
+                raise ParseError(
+                    message="Expected module name in import list",
+                    line=self.current_token.line,
+                    column=self.current_token.column
+                )
+            name_tok = self.current_token
+            self.advance()
+            imports.append(Import(
+                module_name=name_tok.value,
+                alias=name_tok.value,
+                line=tok.line,
+                column=tok.column
+            ))
+            
+            if self.current_token.type == TokenType.COMMA:
+                self.advance()
+            
+            elif self.current_token.type != TokenType.RBRACE:
+                raise ParseError(
+                    message="Expected ',' or '}' in import list",
+                    line=self.current_token.line,
+                    column=self.current_token.column
+                )
+        
+        self.advance()
+        if len(imports) == 1:
+            return imports[0]
+        
+        return Block(
+            statements=imports,
+            line=tok.line,
+            column=tok.column
         )
     
     def token_to_op(self, token):

@@ -83,6 +83,7 @@ class LexerError(CompileError): pass
 class ParseError(CompileError): pass
 class SemanticError(CompileError): pass
 class TypeError(CompileError): pass
+class ImportError(CompileError): pass
 class UndefinedVariableError(SemanticError): pass
 class UnreachableCodeWarning(CompileError): pass
 

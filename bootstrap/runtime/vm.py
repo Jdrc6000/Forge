@@ -1,14 +1,26 @@
+import os
+
 from bootstrap.frontend.token_types import *
 from bootstrap.exceptions import *
 from .builtins_registry import BUILTINS
 from .methods import resolve_member
+
+from bootstrap.frontend.lexer import Lexer
+from bootstrap.frontend.parser import Parser
+from bootstrap.semantic.analyser import Analyser
+from bootstrap.semantic.symbol_table import SymbolTable
+from bootstrap.optimiser.optimiser import Optimiser
+from bootstrap.ir.generator import IRGenerator
+from bootstrap.ir.cfg_builder import build_cfg
+from bootstrap.ir.liveness import remove_unreachable
+from bootstrap.runtime.regalloc import linear_scan_allocate
 
 # past-josh: PLEASE FOR THE LOVE OF GOD REFACTOR TO REGISTER-BASED!!
 # future-josh: your wish is my command
 
 # other past-josh: ok... PLEASE GET RID OF THIS AND COMPILE TO BYTECODE!!!!!!
 class VM:
-    def __init__(self, num_regs):
+    def __init__(self, num_regs, source_dir="."):
         self.num_regs = num_regs
         self.regs = [None] * self.num_regs
         self.free_regs = list(range(self.num_regs))
@@ -22,6 +34,37 @@ class VM:
         
         self.structs = {}
         self.struct_methods = {}
+        
+        self.source_dir = source_dir
+    
+    def _compile_and_run_module(self, module_name):
+        path = os.path.join(self.source_dir, f"{module_name}.fg")
+        if not os.path.exists(path):
+            raise RuntimeError(
+                message=f"Module '{module_name}' not found at '{path}'",
+                ip=self.ip
+            )
+        
+        with open(path, "r", encoding="utf-8") as f:
+            source = f.read()
+        
+        tokens = Lexer(source).get_tokens()
+        tree = Parser(tokens).parse()
+        Analyser(SymbolTable(), source_dir=self.source_dir).analyse(tree)
+        tree = Optimiser().optimise(tree)
+        ir_gen = IRGenerator()
+        ir_gen.generate(tree)
+        cfg = build_cfg(ir_gen.ir.code)
+        remove_unreachable(cfg)
+        
+        flat = cfg.flatten()
+        allocated = linear_scan_allocate(flat, num_regs=self.num_regs)
+        
+        child_vm = VM(num_regs=self.num_regs, source_dir=self.source_dir)
+        child_vm.code = allocated
+        child_vm.ip = child_vm.find_label("__main__")
+        child_vm.run(allocated)
+        return child_vm.vars
     
     def dump_regs(self): # simple dump debugger
         print(f"used regs: {len([reg for reg in self.regs if reg is not None])}")
@@ -67,7 +110,18 @@ class VM:
                 self.regs[a.id] = b.value
             
             elif op == "LOAD_VAR":
-                self.regs[a.id] = self.vars[b]
+                if b not in self.vars:
+                    if any(k.startswith(f"{b}.") for k in self.vars):
+                        self.regs[a.id] = _ModuleNamespace(b)
+                    
+                    else:
+                        raise RuntimeError(
+                            message=f"Undefined variable '{b}'",
+                            ip=self.ip
+                        )
+                
+                else:
+                    self.regs[a.id] = self.vars[b]
             
             elif op == "STORE_VAR":
                 self.vars[a] = self.regs[b.id]
@@ -76,7 +130,17 @@ class VM:
                 obj = self.regs[b.id]
                 attr_name = c
                 
-                if isinstance(obj, dict):
+                if isinstance(obj, _ModuleNamespace):
+                    ns_key = f"{obj.alias}.{attr_name}"
+                    if ns_key not in self.vars:
+                        raise RuntimeError(
+                            message=f"Module '{obj.alias}' has no export '{attr_name}'",
+                            ip=self.ip
+                        )
+                    
+                    self.regs[a.id] = self.vars[ns_key]
+                
+                elif isinstance(obj, dict):
                     if attr_name not in obj:
                         raise RuntimeError(
                             message=f"Struct has no field '{attr_name}'",
@@ -173,6 +237,13 @@ class VM:
                 ret = builtin(self, arg_regs)
                 if instr.c:
                     self.regs[instr.c.id] = ret
+
+            elif op == "IMPORT_MODULE":
+                alias, module_name = a, b
+                module_vars = self._compile_and_run_module(module_name)
+                
+                for var_name, value in module_vars.items():
+                    self.vars[f"{alias}.{var_name}"] = value
 
             elif op == "RETURN":
                 ret_value = None
@@ -280,3 +351,10 @@ class VM:
                 )
     
             self.ip += 1
+
+class _ModuleNamespace:
+    def __init__(self, alias):
+        self.alias = alias
+    
+    def __repr__(self):
+        return f"<module:{self.alias}>"

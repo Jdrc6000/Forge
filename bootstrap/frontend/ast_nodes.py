@@ -166,3 +166,10 @@ class StructLiteral(AST):
     args: TypingList[AST]
     line: int = 0
     column: int = 0
+
+@dataclass
+class Import(AST):
+    module_name: str
+    alias: str
+    line: int = 0
+    column: int = 0

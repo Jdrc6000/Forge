@@ -35,6 +35,7 @@ class TokenType(Enum):
     BREAK = auto()
     CONTINUE = auto()
     STRUCT = auto()
+    IMPORT = auto()
     
     AND = auto()
     OR = auto()

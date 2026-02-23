@@ -1,8 +1,13 @@
+import os
+
 from bootstrap.semantic.types import *
 from bootstrap.frontend.ast_nodes import *
-from bootstrap.semantic.symbol_table import *
 from bootstrap.exceptions import *
 from bootstrap.runtime.builtins_registry import BUILTINS
+
+from bootstrap.frontend.lexer import Lexer
+from bootstrap.frontend.parser import Parser
+from bootstrap.semantic.symbol_table import SymbolTable
 
 # message for future-josh
 #  this is going to be the most confusing, awful, horrid-looking code you have ever seen,
@@ -13,11 +18,43 @@ from bootstrap.runtime.builtins_registry import BUILTINS
 # future-future-future-josh here, its currently 1:33am on a wednesday, and the code base has grown to 2800 lines of bloody code
 
 class Analyser:
-    def __init__(self, symbols):
+    def __init__(self, symbols, source_dir="."):
         self.symbols: SymbolTable = symbols
         self.current_function = None
         self.current_struct_fields = None
         self.loop_depth = 0
+        self.source_dir = source_dir
+        self.imported_modules = set()
+    
+    def _analyse_import(self, node):
+        path = os.path.join(self.source_dir, f"{node.module_name}.fg")
+        if not os.path.exists(path):
+            raise ImportError(
+                message=f"Cannot find module '{node.module_name}' at '{path}'",
+                line=node.line,
+                column=node.column
+            )
+        
+        if node.module_name in self.imported_modules:
+            return # already imported
+        self.imported_modules.add(node.module_name)
+        
+        with open(path, "r", encoding="utf-8") as f:
+            source = f.read()
+
+        tokens = Lexer(source).get_tokens()
+        module_tree = Parser(tokens).parse()
+        module_symbols = SymbolTable()
+        child_analyser = Analyser(module_symbols, source_dir=self.source_dir)
+        child_analyser.analyse(module_tree)
+        
+        self.symbols.define(
+            node.alias,
+            {
+                "type": "module",
+                "module_name": node.module_name
+            }
+        )
     
     def analyse(self, node):
         if isinstance(node, Module):
@@ -312,6 +349,13 @@ class Analyser:
                 self.current_function = old_fn
                 self.current_struct_fields = old_fields
                 self.symbols.exit_scope()
+        
+        elif isinstance(node, Import):
+            self._analyse_import(node)
+        
+        elif isinstance(node, Block):
+            for stmt in node.statements:
+                self.analyse(stmt)
         
         else:
             return None

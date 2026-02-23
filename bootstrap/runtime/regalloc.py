@@ -32,9 +32,6 @@ def get_defs_uses(instr):
     elif instr.op == "STORE_VAR":
         return [], [instr.b]
 
-    elif instr.op in ("PRINT",):
-        return [], [instr.a]
-
     elif instr.op in ("JUMP", "JUMP_IF_TRUE", "JUMP_IF_FALSE"):
         return [], [instr.a] if instr.op in ("JUMP_IF_TRUE", "JUMP_IF_FALSE") else []
 
@@ -66,9 +63,6 @@ def get_defs_uses(instr):
 
     elif instr.op == "RETURN":
         return [], [instr.a] if instr.a else []
-    
-    elif instr.op == "LABEL":
-        return [], []
 
     elif instr.op == "BUILD_LIST":
         uses = instr.arg_regs if hasattr(instr, "arg_regs") else []
@@ -78,7 +72,7 @@ def get_defs_uses(instr):
         uses = instr.arg_regs if hasattr(instr, "arg_regs") else []
         return [instr.a], uses
     
-    elif instr.op == "STRUCT_DEF":
+    elif instr.op in ("LABEL", "STRUCT_DEF", "IMPORT_MODULE"):
         return [], []
 
     else:
@@ -182,6 +176,13 @@ def linear_scan_allocate(code, num_regs):
                 rewrite_operand(instr.a),
                 rewrite_operand(instr.b),
                 instr.c # REFRAIN FROM REWRITING AT ALL TIMES, DOING SO WILL DISTRUPT THE COSMIC ENERGY OF THE UNIVERSE AND OBLITERATE EVERYTHING (only cuz its the attr/method name)
+            )
+        
+        elif instr.op == "IMPORT_MODULE":
+            new_instr = Instr(
+                instr.op,
+                instr.a,
+                instr.b
             )
         
         elif instr.op in ("BUILD_LIST", "BUILD_STRUCT"):

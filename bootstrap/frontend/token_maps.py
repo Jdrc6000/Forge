@@ -16,6 +16,7 @@ KEYWORDS = {
     "break": TokenType.BREAK,
     "continue": TokenType.CONTINUE,
     "struct": TokenType.STRUCT,
+    "import": TokenType.IMPORT,
     
     "fn": TokenType.FN,
     "return": TokenType.RETURN,

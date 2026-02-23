@@ -354,3 +354,11 @@ class IRGenerator:
         instr.arg_regs = arg_regs
         self.ir.code.append(instr)
         return dest
+    
+    def gen_Import(self, node):
+        instr = Instr("IMPORT_MODULE", node.alias, node.module_name)
+        self.ir.code.append(instr)
+    
+    def gen_Block(self, node):
+        for stmt in node.statements:
+            self.generate(stmt)

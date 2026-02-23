@@ -1,0 +1,4 @@
+import { math }
+
+final = math.a + math.b
+println(final)
