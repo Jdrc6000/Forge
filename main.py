@@ -1,5 +1,5 @@
 from time import time
-import os, sys
+import os
 
 from bootstrap.frontend.lexer import Lexer
 from bootstrap.frontend.parser import Parser
@@ -66,8 +66,8 @@ def run_source(code, source_dir=".", filename="<string>", num_regs=1024):
         flat_code = cfg.flatten()
         allocated = linear_scan_allocate(flat_code, num_regs=num_regs)
 
-        for i, instr in enumerate(allocated):
-            print(f"realloc{i} {instr.op} {fmt(instr.a)} {fmt(instr.b)} {fmt(instr.c)}") #:04 to pad to 4 0's
+        #for i, instr in enumerate(allocated):
+        #    print(f"realloc{i} {instr.op} {fmt(instr.a)} {fmt(instr.b)} {fmt(instr.c)}") #:04 to pad to 4 0's
 
         start_vm = time()
 
@@ -114,7 +114,7 @@ def run_source(code, source_dir=".", filename="<string>", num_regs=1024):
         raise RuntimeError(f"couldnt even begin to tell you where this came from: {e}") from e
 
 if __name__ == "__main__":
-    run_file("./examples/test.fg")
+    run_file(r"./forge/examples/test.fg")
 
 # timeline for additions
 #DONE better errors (lineno / badline)
@@ -123,7 +123,7 @@ if __name__ == "__main__":
 #DONE structs
 #DONE dot notation
 #     gc
-#     module system
+#DONE module system
 #     decent optimiser
 #     better backend (x86-64)
 #     bytecode + vm backend (its never too late to back down btw)
