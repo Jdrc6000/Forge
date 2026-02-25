@@ -43,10 +43,9 @@ Planned improvements:
 | Feature | Priority | Notes |
 |---------|----------|-------|
 | Additional optimisation passes | low |
-| Module system | high | Supports multiple files |
-| Compile to bytecode | low |
-| Structs | high | User-defined data types |
+| Hashmaps | high | map["key"] = value |
 | Real types instead of Python types | medium | Support for custom types |
+| Compile to bytecode | low |
 | String interpolations | medium | Supports defining variables inside strings |
 
 ## Examples

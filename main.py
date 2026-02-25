@@ -1,4 +1,5 @@
 from time import time
+from pathlib import Path
 import os
 
 from bootstrap.frontend.lexer import Lexer
@@ -114,7 +115,7 @@ def run_source(code, source_dir=".", filename="<string>", num_regs=1024):
         raise RuntimeError(f"couldnt even begin to tell you where this came from: {e}") from e
 
 if __name__ == "__main__":
-    run_file(r"./forge/examples/test.fg")
+    run_file(Path(__file__).parent / "examples/test.fg")
 
 # timeline for additions
 #DONE better errors (lineno / badline)
