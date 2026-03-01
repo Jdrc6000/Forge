@@ -74,7 +74,7 @@ class Analyser:
                 if sym["type"] == "struct":
                     if len(node.args) != sym["field_count"]:
                         raise TypeError(
-                            message=f"Struct '{func_name}' has {sym["field_count"]} fields, got {len(node.args)}",
+                            message=f"Struct '{func_name}' has {sym['field_count']} fields, got {len(node.args)}",
                             token=node.func
                         )
                     
