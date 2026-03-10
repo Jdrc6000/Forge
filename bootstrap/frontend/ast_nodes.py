@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import List as TypingList, Optional, Any, Union
+from typing import List as TypingList, Optional, Any, Union, Tuple
 
 @dataclass
 class AST:
@@ -173,3 +173,17 @@ class Import(AST):
     alias: str
     line: int = 0
     column: int = 0
+
+@dataclass
+class MapLiteral(AST):
+    pairs: List[Tuple[AST, AST]]
+
+@dataclass
+class IndexGet(AST):
+    obj: AST
+
+@dataclass
+class IndexSet(AST):
+    obj: AST
+    index: AST
+    value: AST

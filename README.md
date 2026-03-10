@@ -28,7 +28,6 @@ Forge is an educational personal project designed to help understand how program
 * Responsive error messages
 * Custom builtin functions
 * Optimisations: Dead Code Elimination (DCE), Constant Folding (CF)
-* Test suite (100 tests covering 8 classes)
 
 ## Notes
 * This is just self-driven personal project, meaning:

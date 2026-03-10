@@ -141,3 +141,4 @@ if __name__ == "__main__":
 #DONE break / continue in loops
 #DONE more builtins
 #     type annotations
+#     hashmaps

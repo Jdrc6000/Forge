@@ -1,4 +1,4 @@
-from typing import Any, List, Callable
+from typing import Any, Callable
 import math
 
 def _require_args(name, args, count):
