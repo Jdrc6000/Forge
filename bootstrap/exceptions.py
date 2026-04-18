@@ -9,7 +9,7 @@ def format_diagnostic(
     line: int,
     column: int,
     message: str,
-    level: str = "error",           # error / warning / note
+    level: str = "error", # error / warning / note
     highlight_length: int = 1
 ) -> str:
     lines = source.splitlines()
@@ -19,7 +19,6 @@ def format_diagnostic(
     lineno = line - 1
     bad_line = lines[lineno].rstrip()
     
-    # Simple trimming for very long lines
     MAX = 72
     start = max(0, column - 1 - MAX // 2)
     end = min(len(bad_line), start + MAX)
@@ -27,9 +26,9 @@ def format_diagnostic(
     caret_pos = max(0, (column - 1) - start) # clamp to 0
 
     color = {
-        "error": "\033[91m",    # red
-        "warning": "\033[93m",    # yellow
-        "note": "\033[94m",    # blue
+        "error": "\033[91m", # red
+        "warning": "\033[93m", # yellow
+        "note": "\033[94m", # blue
     }.get(level, "")
 
     reset = "\033[0m"

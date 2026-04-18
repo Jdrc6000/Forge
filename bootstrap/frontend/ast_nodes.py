@@ -181,9 +181,14 @@ class MapLiteral(AST):
 @dataclass
 class IndexGet(AST):
     obj: AST
+    index: AST
+    line: int = 0
+    column: int = 0
 
 @dataclass
 class IndexSet(AST):
     obj: AST
     index: AST
     value: AST
+    line: int = 0
+    column: int = 0

@@ -171,13 +171,24 @@ class IRGenerator:
     # honestly tho, i havent a clue whats going on, but all i know is that you can now do:
     #   a < b < c
     def gen_Compare(self, node):
-        # We generate:   result = left op1 comp[0] AND comp[0] op2 comp[1] AND ...
+        if not node.ops:  # should never happen
+            return self.generate(node.left)
+
+        # Simple case: single comparison (most common)
+        if len(node.ops) == 1:
+            left_reg = self.generate(node.left)
+            right_reg = self.generate(node.comparators[0])
+            dest = self.ir.new_reg()
+            ir_op = CMP_OP_TO_IR[node.ops[0]]
+            self.ir.emit(ir_op, dest, left_reg, right_reg)
+            return dest
+
+        # Chained comparisons (a < b < c) — keep your current logic but fix it
         left_reg = self.generate(node.left)
         result_reg = self.ir.new_reg()
-        self.ir.emit("LOAD_CONST", result_reg, Imm(True)) # start assuming true
+        self.ir.emit("LOAD_CONST", result_reg, Imm(True))
 
         current_left = left_reg
-
         for op_str, right_ast in zip(node.ops, node.comparators):
             right_reg = self.generate(right_ast)
             cmp_reg = self.ir.new_reg()

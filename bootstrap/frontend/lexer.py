@@ -44,13 +44,13 @@ class Lexer:
         while self.current_char and self.current_char in "0123456789.":
             if self.current_char == ".":
                 dot_count += 1
-                # Critical: if this is the first dot, peek ahead
+                
                 if dot_count == 1:
                     next_char = self.peek()
                     # If we see . followed by another . do NOT consume this dot as part of number
                     if next_char == ".":
                         break  # leave the .. for the range rule
-                    # Optional: also block trailing dot with no digit after (like 42.)
+                    
                     if next_char is None or not next_char.isdigit():
                         break
 
