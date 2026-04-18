@@ -1,6 +1,6 @@
 import { math }
 
-a = 6
+a = 5
 b = 2
-println("result for " + a + " / " + b + " = " + math.div(math.add(a,b), math.sub(a,b)))
+println("result for " + str(a) + " / " + str(b) + " = " + str(math.div(math.add(a,b), math.sub(a,b))))
 if a == 5 { println("a is 5") }
