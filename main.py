@@ -131,7 +131,6 @@ if __name__ == "__main__":
 #     self-hosting
 
 # further additions to my pain
-#DONE test suite
 #DONE list / arrays
 #     multiple return values
 #     error messages through vm
@@ -142,3 +141,4 @@ if __name__ == "__main__":
 #DONE more builtins
 #     type annotations
 #     hashmaps
+#     robustify the if / else if / else handling cuz teach said so

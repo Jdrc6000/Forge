@@ -4,6 +4,19 @@ from bootstrap.runtime.regalloc import get_defs_uses
 
 from collections import deque
 
+def reverse_postorder(cfg):
+    visited = set()
+    order = []
+    
+    def dfs(bb):
+        visited.add(bb.id)
+        for succ in bb.succs:
+            if succ.id not in visited:
+                dfs(succ)
+    
+    dfs(cfg.entry)
+    return list(reversed(order)) # actually reverse postorder
+
 def compute_liveness(cfg: CFG):
     for bb in cfg.blocks:
         bb.live_in = set()
@@ -25,10 +38,11 @@ def compute_liveness(cfg: CFG):
                     bb.defs.add(r)
 
     changed = True
+    rpo = reverse_postorder(cfg)
     while changed:
         changed = False
         
-        for bb in reversed(cfg.blocks): # backward pass?
+        for bb in rpo:
             new_out = set()
             
             for succ in bb.succs:
@@ -63,12 +77,12 @@ def eliminate_dead_stores(cfg: CFG):
             if is_side_affect or (defined_regs and any(d in needed for d in defined_regs)):
                 new_instrs.append(instr)
                 
-                for u in uses:
-                    if isinstance(u, Reg):
-                        needed.add(u)
-
             for d in defined_regs:
                 needed.discard(d)
+                
+            for u in uses:
+                if isinstance(u, Reg):
+                    needed.add(u)
         
         bb.instrs = list(reversed(new_instrs))
 
@@ -78,20 +92,19 @@ def remove_unreachable(cfg: CFG):
     
     while q:
         bb = q.popleft()
-        
         if bb.id in visited:
             continue
-        
         visited.add(bb.id)
         for s in bb.succs:
             q.append(s)
     
-    cfg.blocks = [
-        bb for bb in cfg.blocks 
-        if bb.id in visited or (bb.instrs and bb.instrs[0].op == "LABEL")
-    ]
+    def is_function_entry(bb):
+        return (bb.instrs and 
+                bb.instrs[0].op == "LABEL" and 
+                isinstance(bb.instrs[0].a, str) and
+                bb.instrs[0].a != "__main__")
     
-    surviving_ids = {bb.id for bb in cfg.blocks}
-    for bb in cfg.blocks:
-        bb.succs = [s for s in bb.succs if s.id in surviving_ids]
-        bb.preds = [p for p in bb.preds if p.id in surviving_ids]
+    cfg.blocks = [
+        bb for bb in cfg.blocks
+        if bb.id in visited or is_function_entry(bb)
+    ]
