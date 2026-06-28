@@ -187,6 +187,74 @@ class Parser:
                 column=tok.column
             )
         
+        elif tok.type == TokenType.LBRACE:
+            self.advance()
+            pairs = []
+            
+            if self.current_token.type != TokenType.RBRACE:
+                while True:
+                    key = self.parse_expr()
+                    if self.current_token.type != TokenType.COLON:
+                        raise ParseError(
+                            message="Expected ':' after map key",
+                            line=self.current_token.line,
+                            column=self.current_token.column
+                        )
+                    self.advance() # consume ':'
+                    value = self.parse_expr()
+                    pairs.append((key, value))
+                    
+                    if self.current_token.type == TokenType.COMMA:
+                        self.advance()
+                    
+                    elif self.current_token.type == TokenType.RBRACE:
+                        break
+                    
+                    else:
+                        raise ParseError(
+                            message="Expected ',' or '}' in map literal",
+                            line=self.current_token.line,
+                            column=self.current_token.column
+                        )
+                self.advance() # consume '}'
+                node = MapLiteral(pairs=pairs)
+                node.line = tok.line
+                node.column = tok.column
+                
+                while self.current_token.type == TokenType.DOT:
+                    dot_line = self.current_token.line
+                    dot_col = self.current_token.column
+                    
+                    self.advance()
+                    if self.current_token.type != TokenType.NAME:
+                        raise ParseError(
+                            message="something wrong with the .name object thingy magig",
+                            line=self.current_token.line,
+                            column=self.current_token.column
+                        )
+                    attr_tok = self.current_token
+                    self.advance()
+                    if self.current_token.type == TokenType.LPAREN:
+                        self.advance()
+                        args = self._parse_arg_list()
+                        node = MethodCall(
+                            obj=node,
+                            method=attr_tok.value,
+                            args=args,
+                            line=self.current_token.line,
+                            column=self.current_token.column
+                        )
+                    
+                    else:
+                        node = Attribute(
+                            obj=node,
+                            attr=attr_tok.value,
+                            line=self.current_token.line,
+                            column=self.current_token.column
+                        )
+                
+                return node
+        
         elif tok.type == TokenType.LBRACKET:
             self.advance()
             elements = []
@@ -236,10 +304,10 @@ class Parser:
                 )
             
             attr_tok = self.current_token
-            self.advance() # eat the name
+            self.advance() # consume the name
             
             if self.current_token.type == TokenType.LPAREN:
-                self.advance() # eat '('
+                self.advance() # consume '('
                 args = self._parse_arg_list()
                 node = MethodCall(
                     obj=node,
@@ -256,6 +324,24 @@ class Parser:
                     line=dot_line,
                     column=dot_col
                 )
+        
+        while self.current_token.type == TokenType.LBRACKET:
+            self.advance()
+            index = self.parse_expr()
+            if self.current_token.type != TokenType.RBRACKET:
+                raise ParseError(
+                    "Expected ']'",
+                    line=self.current_token.line,
+                    column=self.current_token.column
+                )
+            
+            self.advance()
+            node = IndexGet(
+                obj=node,
+                index=index,
+                line=self.current_token.line,
+                column=self.current_token.column
+            )
         
         return node
     
@@ -455,7 +541,7 @@ class Parser:
         return FunctionDef(
             name=func_name,
             args=args,
-            body=body,
+            body=body.statements,
             line=function_token.line,
             column=function_token.column
         )
@@ -465,7 +551,7 @@ class Parser:
         self.advance()  # skip 'if'
         test = self.parse_expr()
         body = self.parse_block()
-        orelse = None
+        orelse = []
         if self.current_token.type == TokenType.ELSE:
             self.advance()  # skip 'else'
             
@@ -481,7 +567,7 @@ class Parser:
                         column=self.current_token.column
                     )
                 # else { ... }
-                orelse = self.parse_block()
+                orelse = self.parse_block().statements
 
         return If(
             test=test,

@@ -253,7 +253,7 @@ class Analyser:
             for arg in node.args:
                 self.symbols.define(arg, UNKNOWN)
 
-            for stmt in node.body.statements:
+            for stmt in node.body:
                 self.analyse(stmt)
 
             self.current_function = old_fn
@@ -343,9 +343,7 @@ class Analyser:
                 old_fields = self.current_struct_fields
                 self.current_function = method
                 self.current_struct_fields = node.fields
-                stmts = method.body.statements if hasattr(method.body, "statements") else method.body
-                for stmt in stmts:
-                    self.analyse(stmt)
+                for stmt in method.body: self.analyse(stmt)
                 self.current_function = old_fn
                 self.current_struct_fields = old_fields
                 self.symbols.exit_scope()

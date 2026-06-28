@@ -48,12 +48,7 @@ class IRGenerator:
         
         # first generate top-level statements
         for stmt in node.body:
-            if isinstance(stmt, StructDef):
-                instr = Instr("STRUCT_DEF", stmt.name)
-                instr.fields = stmt.fields
-                instr.methods = [m.name for m in stmt.methods]
-                self.ir.code.append(instr)
-            
+            # now natively holds structdef
             if not isinstance(stmt, FunctionDef):
                 self.generate(stmt)
 
@@ -171,32 +166,33 @@ class IRGenerator:
     # honestly tho, i havent a clue whats going on, but all i know is that you can now do:
     #   a < b < c
     def gen_Compare(self, node):
-        if not node.ops:  # should never happen
-            return self.generate(node.left)
-
-        # Simple case: single comparison (most common)
         if len(node.ops) == 1:
             left_reg = self.generate(node.left)
             right_reg = self.generate(node.comparators[0])
             dest = self.ir.new_reg()
-            ir_op = CMP_OP_TO_IR[node.ops[0]]
-            self.ir.emit(ir_op, dest, left_reg, right_reg)
+            self.ir.emit(CMP_OP_TO_IR[node.ops[0]], dest, left_reg, right_reg)
             return dest
-
-        # Chained comparisons (a < b < c) — keep your current logic but fix it
-        left_reg = self.generate(node.left)
+        
         result_reg = self.ir.new_reg()
         self.ir.emit("LOAD_CONST", result_reg, Imm(True))
-
-        current_left = left_reg
+        
+        current_left = self.generate(node.left)
+        
         for op_str, right_ast in zip(node.ops, node.comparators):
             right_reg = self.generate(right_ast)
             cmp_reg = self.ir.new_reg()
-            ir_op = CMP_OP_TO_IR[op_str]
-            self.ir.emit(ir_op, cmp_reg, current_left, right_reg)
+            self.ir.emit(CMP_OP_TO_IR[op_str], cmp_reg, current_left, right_reg)
+            
+            jmp = len(self.ir.code)
+            self.ir.emit("JUMP_IF_FALSE", cmp_reg, None) # patched later
+            
             self.ir.emit("AND", result_reg, result_reg, cmp_reg)
-            current_left = right_reg
-
+            current_left = right_reg # for the next iteration, right becomes left
+        
+        end_ip = len(self.ir.code)
+        for i in range(len(node.ops)):
+            self.ir.code[jmp + i * 2].b = end_ip
+            
         return result_reg
     
     # binop the goat for using less regs
@@ -355,9 +351,6 @@ class IRGenerator:
         self.ir.emit("JUMP", None)
         self.loop_stack[-1][0].append(patch_index)
     
-    def gen_StructDef(self, node):
-        pass # purely compile-time, nothing to emit
-    
     def gen_StructLiteral(self, node):
         arg_regs = [self.generate(a) for a in node.args]
         dest = self.ir.new_reg()
@@ -373,3 +366,9 @@ class IRGenerator:
     def gen_Block(self, node):
         for stmt in node.statements:
             self.generate(stmt)
+    
+    def gen_StructDef(self, node):
+        instr = Instr("STRUCT_DEF", node.name)
+        instr.fields = node.fields
+        instr.methods = [m.name for m in node.methods]
+        self.ir.code.append(instr)

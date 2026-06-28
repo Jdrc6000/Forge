@@ -176,7 +176,9 @@ class Import(AST):
 
 @dataclass
 class MapLiteral(AST):
-    pairs: List[Tuple[AST, AST]]
+    pairs: TypingList[Tuple[AST, AST]]
+    line: int = 0
+    column: int = 0
 
 @dataclass
 class IndexGet(AST):

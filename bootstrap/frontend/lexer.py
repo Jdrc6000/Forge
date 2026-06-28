@@ -81,11 +81,28 @@ class Lexer:
         self.advance() # skip opening quote
         
         while self.current_char and self.current_char != quote_char:
-            string_val += self.current_char
+            if self.current_char == "\\":
+                self.advance()
+                if self.current_char == "n":
+                    string_val += "\n"
+                elif self.current_char == "t":
+                    string_val += "\t"
+                elif self.current_char == "\\":
+                    string_val += "\\"
+                elif self.current_char == quote_char:
+                    string_val += quote_char
+                else:
+                    string_val += "\\" + self.current_char # unknown escape, keep literal
+            else:
+                string_val += self.current_char
             self.advance()
-        
-        self.advance()
-        
+            
+        if not self.current_char:
+            raise LexerError(
+                message="Unterminated string literal",
+                token=Token(TokenType.ILLEGAL, "\\n", self.line, self.col)
+            )
+        self.advance() # skip closing quote
         return Token(TokenType.STRING, string_val, line=start_line, column=start_col)
     
     def name(self):

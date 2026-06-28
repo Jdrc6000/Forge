@@ -21,9 +21,6 @@ def build_cfg(code: List[Instr]) -> CFG:
             
             if isinstance(target, int):
                 leaders.add(target)
-            
-            if instr.op == "LABEL":
-                leaders.add(i)
     
     leaders = sorted(leaders)
     

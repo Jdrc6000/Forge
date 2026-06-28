@@ -12,7 +12,7 @@ class Builtin:
         self.min_args = min_args
         self.max_args = max_args if max_args is not None else min_args
 
-    def __call__(self, vm: VM, arg_regs: List[Reg]):
+    def __call__(self, vm: 'VM', arg_regs: List[Reg]):
         args = [vm.regs[r.id] for r in arg_regs]
         
         if len(args) < self.min_args or (self.max_args is not None and len(args) > self.max_args):
@@ -22,22 +22,22 @@ class Builtin:
         
         return self.func(vm, args)
 
-def builtin_print(vm: VM, args: list):
+def builtin_print(vm, args: list):
     print(*args, sep=" ", end="")
 
-def builtin_println(vm: VM, args: list):
+def builtin_println(vm, args: list):
     print(*args)
 
-def builtin_len(vm: VM, args: list):
+def builtin_len(vm, args: list):
     if len(args) != 1:
         raise ValueError("len() takes exactly one argument")
     return len(args[0])
 
-def builtin_input(vm: VM, args: list):
+def builtin_input(vm, args: list):
     prompt = args[0] if args else ""
     return input(prompt)
 
-def builtin_read_file(vm: VM, args: list):
+def builtin_read_file(vm, args: list):
     path = args[0]
     
     try:
@@ -50,7 +50,7 @@ def builtin_read_file(vm: VM, args: list):
     except OSError as e:
         raise RuntimeError(message=f"read_file: {e}")
 
-def builtin_write_file(vm: VM, args: list):
+def builtin_write_file(vm, args: list):
     path, content = args[0], args[1]
     
     try:
@@ -62,7 +62,7 @@ def builtin_write_file(vm: VM, args: list):
     
     return 0
 
-def builtin_append_file(vm: VM, args: list):
+def builtin_append_file(vm, args: list):
     path, content = args[0], args[1]
     
     try:
@@ -74,7 +74,7 @@ def builtin_append_file(vm: VM, args: list):
     
     return 0
 
-def builtin_file_exists(vm: VM, args: list):
+def builtin_file_exists(vm, args: list):
     return os.path.exists(args[0])
 
 def builtin_int(vm, args):

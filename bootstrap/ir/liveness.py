@@ -13,6 +13,7 @@ def reverse_postorder(cfg):
         for succ in bb.succs:
             if succ.id not in visited:
                 dfs(succ)
+        order.append(bb)
     
     dfs(cfg.entry)
     return list(reversed(order)) # actually reverse postorder

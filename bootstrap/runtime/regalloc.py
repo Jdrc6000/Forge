@@ -102,8 +102,11 @@ def pick_spill(active, current):
 def linear_scan_allocate(code, num_regs):
     ranges = compute_live_ranges(code)
     active = []
-    free_regs = list(range(num_regs))
     new_code = []
+    
+    usable_regs = num_regs - 1
+    free_regs = list(range(usable_regs))
+    scratch_reg = usable_regs
     
     next_slot = 0
 
@@ -156,11 +159,10 @@ def linear_scan_allocate(code, num_regs):
 
         # reload uses
         for u in uses:
-            if not isinstance(u, Reg):
-                continue
-            lr = range_map[u]
-            if lr.slot is not None:
-                new_code.append(Instr("SPILL_LOAD", lr.phys, lr.slot))
+            if isinstance(u, Reg):
+                lr = range_map[u]
+                if lr.slot is not None:
+                    new_code.append(Instr("SPILL_LOAD", Reg(scratch_reg), lr.slot))
         
         if instr.op == "CALL_BUILTIN":
             new_instr = Instr(
@@ -216,10 +218,9 @@ def linear_scan_allocate(code, num_regs):
 
         # spill defs
         for d in defs:
-            if not isinstance(d, Reg):
-                continue
-            lr = range_map[d]
-            if lr.slot is not None:
-                new_code.append(Instr("SPILL_STORE", lr.slot, lr.phys))
-
+            if isinstance(d, Reg):
+                lr = range_map[d]
+                if lr.slot is not None:
+                    new_code.append(Instr("SPILL_STORE", lr.slot, Reg(scratch_reg)))
+    
     return new_code
