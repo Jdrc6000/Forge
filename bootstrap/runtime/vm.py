@@ -17,7 +17,6 @@ from bootstrap.runtime.regalloc import linear_scan_allocate
 
 # past-josh: PLEASE FOR THE LOVE OF GOD REFACTOR TO REGISTER-BASED!!
 # future-josh: your wish is my command
-
 # other past-josh: ok... PLEASE GET RID OF THIS AND COMPILE TO BYTECODE!!!!!!
 class VM:
     def __init__(self, num_regs, source_dir="."):
@@ -91,14 +90,12 @@ class VM:
         self.code = code
         self.structs = {}
         self.struct_methods = {}
-        
         for i, instr in enumerate(code):
             if instr.op == "STRUCT_DEF":
-                self.struct_methods[instr.a] = {
+                self.structs[instr.a] = {  # Fix: was self.struct_methods
                     "fields": getattr(instr, "fields", []),
                     "methods": getattr(instr, "methods", [])
                 }
-            
             elif instr.op == "LABEL" and getattr(instr, "struct_names", None) is not None:
                 self.struct_methods[instr.a] = i
         
@@ -289,8 +286,15 @@ class VM:
                 
                 self.code = self.code + patched_module_code
                 for i, minstr in enumerate(patched_module_code):
-                    if (minstr.op == "LABEL" and minstr.a != "__main__"
-                        and not getattr(minstr, "struct_names", None)):
+                    if minstr.op == "STRUCT_DEF":
+                        self.structs[minstr.a] = {
+                            "fields": getattr(minstr, "fields", []),
+                            "methods": getattr(minstr, "methods", [])
+                        }
+                    elif minstr.op == "LABEL" and getattr(minstr, "struct_names", None) is not None:
+                        self.struct_methods[minstr.a] = offset + i
+                    elif (minstr.op == "LABEL" and minstr.a != "__main__"
+                          and not getattr(minstr, "struct_names", None)):
                         self.vars[f"{alias}.{minstr.a}"] = ("__func__", offset + i)
 
             elif op == "RETURN":

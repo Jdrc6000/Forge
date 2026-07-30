@@ -1,6 +1,5 @@
-import { math }
+float_1 = 3.14
+float_2 = 2.71
+product = float_1 * float_2
 
-a = 5
-b = 2
-println("result for " + str(a) + " * " + str(b) + " = " + str(math.mul(a, b)))
-if a == 5 { println("a is 5") }
+println(str(product))

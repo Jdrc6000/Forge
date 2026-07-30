@@ -3,7 +3,7 @@ import math
 
 def _require_args(name, args, count):
     if len(args) != count:
-        raise TypeError(f"'name' takes {count} argument(s), got {len(args)}")
+        raise AttributeError(f"'name' takes {count} argument(s), got {len(args)}")
 
 def _list_push(list, args):
     _require_args("push", args, 1)

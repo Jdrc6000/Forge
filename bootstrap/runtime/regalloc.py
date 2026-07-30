@@ -11,16 +11,13 @@ class LiveRange:
         self.phys = None     # physical register assigned
         self.slot = None
 
-# Compute defs and uses per opcode
+# compute defs and uses per opcode
 def get_defs_uses(instr):
     if instr.op in ("LOAD_CONST", "LOAD_VAR"):
         return [instr.a], []
 
-    # Arithmetic / comparisons that write to dest (a) and read b,c
-    elif instr.op in (
-        "ADD", "SUB", "MUL", "DIV", "POW",
-        "EQ", "NE", "LT", "GT", "LE", "GE", "AND",
-    ):
+    # arithmetic / comparisons that write to dest (a) and read b,c
+    elif instr.op in ("ADD", "SUB", "MUL", "DIV", "POW", "EQ", "NE", "LT", "GT", "LE", "GE", "AND"):
         uses = []
         if instr.b: uses.append(instr.b)
         if instr.c: uses.append(instr.c)
@@ -104,12 +101,23 @@ def linear_scan_allocate(code, num_regs):
     active = []
     new_code = []
     
-    usable_regs = num_regs - 1
+    # Dynamically determine how many scratch registers we need.
+    # An instruction might need 1 scratch per spilled use + 1 for a spilled def.
+    max_uses = 0
+    for instr in code:
+        _, uses = get_defs_uses(instr)
+        if len(uses) > max_uses:
+            max_uses = len(uses)
+            
+    num_scratch = max_uses + 1 # +1 to account for defs
+    if num_scratch >= num_regs:
+        num_scratch = num_regs - 1 # fallback
+        
+    usable_regs = num_regs - num_scratch
     free_regs = list(range(usable_regs))
-    scratch_reg = usable_regs
-    
+    scratch_regs = list(range(usable_regs, num_regs))
     next_slot = 0
-
+    
     def expire_old(current_start):
         nonlocal active, free_regs
         still_active = []
@@ -119,51 +127,68 @@ def linear_scan_allocate(code, num_regs):
             else:
                 free_regs.append(r.phys)
         active[:] = still_active
-
+        
     for r in ranges:
         expire_old(r.start)
         if not free_regs:
             victim = pick_spill(active, r)
-
             if victim is r:
                 r.slot = next_slot
                 next_slot += 1
                 r.phys = None
                 continue
             else:
-                # spill an active range
                 victim.slot = next_slot
                 next_slot += 1
-
                 free_regs.append(victim.phys)
+                victim.phys = None  # FIX: victim loses its physical register
                 active.remove(victim)
-        
         r.phys = free_regs.pop(0)
         active.append(r)
         active.sort(key=lambda x: x.end)
-    
-    def rewrite_operand(op):
-        if isinstance(op, Reg):
-            lr = range_map.get(op) # lookup virtual Reg object
-            if lr is None:
-                return op
-            if lr.phys is not None:
-                return Reg(lr.phys)
-        return op
-    
-    # Rewrite registers in a new IR list
-    range_map = {r.reg: r for r in ranges}
-    for instr in code:
-
-        defs, uses = get_defs_uses(instr)
-
-        # reload uses
-        for u in uses:
-            if isinstance(u, Reg):
-                lr = range_map[u]
-                if lr.slot is not None:
-                    new_code.append(Instr("SPILL_LOAD", Reg(scratch_reg), lr.slot))
         
+    # FIX: range_map should be computed ONCE here, outside the loops
+    range_map = {r.reg: r for r in ranges}
+    
+    for instr in code:
+        defs, uses = get_defs_uses(instr)
+        
+        scratch_idx = 0
+        use_mapping = {}
+        
+        # load spilled uses into unique scratch registers
+        for u in uses:
+            if isinstance(u, Reg) and u not in use_mapping:
+                lr = range_map.get(u)
+                if lr and lr.slot is not None:
+                    s = scratch_regs[scratch_idx % len(scratch_regs)]
+                    scratch_idx += 1
+                    new_code.append(Instr("SPILL_LOAD", Reg(s), lr.slot))
+                    use_mapping[u] = Reg(s)
+                    
+        # assign scratch registers for spilled defs
+        def_mapping = {}
+        for d in defs:
+            if isinstance(d, Reg) and d not in def_mapping:
+                lr = range_map.get(d)
+                if lr and lr.slot is not None:
+                    s = scratch_regs[scratch_idx % len(scratch_regs)]
+                    scratch_idx += 1
+                    def_mapping[d] = Reg(s)
+                    
+        def rewrite_operand(op):
+            if isinstance(op, Reg):
+                if op in use_mapping:
+                    return use_mapping[op]
+                if op in def_mapping:
+                    return def_mapping[op]
+                lr = range_map.get(op)
+                if lr is None:
+                    return op
+                if lr.phys is not None:
+                    return Reg(lr.phys)
+            return op
+
         if instr.op == "CALL_BUILTIN":
             new_instr = Instr(
                 instr.op,
@@ -171,29 +196,17 @@ def linear_scan_allocate(code, num_regs):
                 [rewrite_operand(r) for r in instr.b] if isinstance(instr.b, list) else rewrite_operand(instr.b),
                 rewrite_operand(instr.c)
             )
-        
         elif instr.op in ("GET_ATTR", "CALL_METHOD"):
             new_instr = Instr(
                 instr.op,
                 rewrite_operand(instr.a),
                 rewrite_operand(instr.b),
-                instr.c # REFRAIN FROM REWRITING AT ALL TIMES, DOING SO WILL DISTRUPT THE COSMIC ENERGY OF THE UNIVERSE AND OBLITERATE EVERYTHING (only cuz its the attr/method name)
+                instr.c 
             )
-        
         elif instr.op == "IMPORT_MODULE":
-            new_instr = Instr(
-                instr.op,
-                instr.a,
-                instr.b
-            )
-        
+            new_instr = Instr(instr.op, instr.a, instr.b)
         elif instr.op in ("BUILD_LIST", "BUILD_STRUCT"):
-            new_instr = Instr(
-                instr.op,
-                rewrite_operand(instr.a),
-                instr.b
-            )
-        
+            new_instr = Instr(instr.op, rewrite_operand(instr.a), instr.b)
         else:
             new_instr = Instr(
                 instr.op,
@@ -201,8 +214,7 @@ def linear_scan_allocate(code, num_regs):
                 rewrite_operand(instr.b),
                 rewrite_operand(instr.c)
             )
-        
-        # Carry over CALL/LABEL metadata, rewriting virtual regs in arg_regs
+            
         if hasattr(instr, "arg_regs"):
             new_instr.arg_regs = [rewrite_operand(r) for r in instr.arg_regs]
         if hasattr(instr, "param_names"):
@@ -213,14 +225,14 @@ def linear_scan_allocate(code, num_regs):
             new_instr.struct_names = instr.struct_names
         if hasattr(instr, "methods"):
             new_instr.methods = instr.methods
-
         new_code.append(new_instr)
-
-        # spill defs
+        
+        # store spilled defs back to memory from their scratch registers
         for d in defs:
             if isinstance(d, Reg):
-                lr = range_map[d]
-                if lr.slot is not None:
-                    new_code.append(Instr("SPILL_STORE", lr.slot, Reg(scratch_reg)))
-    
+                lr = range_map.get(d)
+                if lr and lr.slot is not None:
+                    s = def_mapping.get(d)
+                    if s:
+                        new_code.append(Instr("SPILL_STORE", lr.slot, s))
     return new_code

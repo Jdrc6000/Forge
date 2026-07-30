@@ -45,28 +45,25 @@ class IRGenerator:
     
     def gen_Module(self, node):
         self.ir.emit("LABEL", "__main__")
-        
-        # first generate top-level statements
         for stmt in node.body:
-            # now natively holds structdef
             if not isinstance(stmt, FunctionDef):
                 self.generate(stmt)
-
-        # jump over function definitions so we don't fall into them
+                
         jmp = len(self.ir.code)
         self.ir.emit("JUMP", None)
-
-        # generate function definitions
+        
         for stmt in node.body:
             if isinstance(stmt, FunctionDef):
                 self.generate(stmt)
-            
             elif isinstance(stmt, StructDef):
                 for method in stmt.methods:
                     self._gen_struct_method(stmt.name, method)
-        
-        # patch the jump to land here (after all functions)
+                    
         self.ir.code[jmp].a = len(self.ir.code)
+        
+        end_reg = self.ir.new_reg()
+        self.ir.emit("LOAD_CONST", end_reg, Imm(0))
+        self.ir.emit("RETURN", end_reg)
     
     def gen_Expr(self, node):
         return self.generate(node.value)
@@ -165,6 +162,7 @@ class IRGenerator:
     # here be dragons
     # honestly tho, i havent a clue whats going on, but all i know is that you can now do:
     #   a < b < c
+    # this is fixed now?
     def gen_Compare(self, node):
         if len(node.ops) == 1:
             left_reg = self.generate(node.left)
@@ -172,27 +170,26 @@ class IRGenerator:
             dest = self.ir.new_reg()
             self.ir.emit(CMP_OP_TO_IR[node.ops[0]], dest, left_reg, right_reg)
             return dest
-        
+
         result_reg = self.ir.new_reg()
         self.ir.emit("LOAD_CONST", result_reg, Imm(True))
-        
         current_left = self.generate(node.left)
         
+        jmp_indices = []
         for op_str, right_ast in zip(node.ops, node.comparators):
             right_reg = self.generate(right_ast)
             cmp_reg = self.ir.new_reg()
             self.ir.emit(CMP_OP_TO_IR[op_str], cmp_reg, current_left, right_reg)
-            
-            jmp = len(self.ir.code)
-            self.ir.emit("JUMP_IF_FALSE", cmp_reg, None) # patched later
-            
+            # AND first, then jump if the accumulated result is False
             self.ir.emit("AND", result_reg, result_reg, cmp_reg)
-            current_left = right_reg # for the next iteration, right becomes left
-        
-        end_ip = len(self.ir.code)
-        for i in range(len(node.ops)):
-            self.ir.code[jmp + i * 2].b = end_ip
+            jmp = len(self.ir.code)
+            self.ir.emit("JUMP_IF_FALSE", result_reg, None)
+            jmp_indices.append(jmp)
+            current_left = right_reg
             
+        end_ip = len(self.ir.code)
+        for jmp in jmp_indices:
+            self.ir.code[jmp].b = end_ip
         return result_reg
     
     # binop the goat for using less regs

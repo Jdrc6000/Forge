@@ -63,7 +63,7 @@ class ConstantFolder(Pass):
             if node.op == "+": return Constant(l + r)
             if node.op == "-": return Constant(l - r)
             if node.op == "*": return Constant(l * r)
-            if node.op == "/": return Constant(l / r)
+            if node.op == "/" and r == 0: return node
             if node.op == "^": return Constant(l ** r)
             if node.op == "and": return Constant(l and r)
             if node.op == "or": return Constant(l or r)

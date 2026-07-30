@@ -26,7 +26,7 @@ class Lexer:
             self.current_char = None
     
     def skip_whitespace(self):
-        while self.current_char and self.current_char in " \t":
+        while self.current_char and self.current_char in " \t\r":
             self.advance()
     
     def peek(self):
