@@ -54,19 +54,26 @@ NUMBER_MEMBERS = {
     "float": lambda n, args: float(n),
 }
 
+MAP_MEMBERS = {
+    "len": lambda m, args: len(m),
+    "keys": lambda m, args: list(m.keys()),
+    "values": lambda m, args: list(m.values()),
+    "has": lambda m, args: (_require_args("has", args, 1) or args[0] in m),
+}
+
 # dispatch
 def resolve_member(obj: Any, name: str) -> Callable:
     if isinstance(obj, str):
         if name in STRING_MEMBERS:
             return STRING_MEMBERS[name]
-    
     elif isinstance(obj, list):
         if name in LIST_MEMBERS:
             return LIST_MEMBERS[name]
-    
     elif isinstance(obj, (int, float)):
         if name in NUMBER_MEMBERS:
             return NUMBER_MEMBERS[name]
-
+    elif isinstance(obj, dict) and "__type__" not in obj:
+        if name in MAP_MEMBERS:
+            return MAP_MEMBERS[name]
     type_name = type(obj).__name__
     raise AttributeError(f"'{type_name}' has no attribute or method '{name}'")

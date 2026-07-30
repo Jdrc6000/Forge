@@ -156,8 +156,12 @@ class Analyser:
             self.analyse(node.value)
         
         elif isinstance(node, Assign):
-            value_type = self.analyse(node.value)
-            self.symbols.define(node.target.id, value_type)
+            if isinstance(node.target, IndexGet) or isinstance(node.target, Attribute):
+                self.analyse(node.target)
+                self.analyse(node.value)
+            else:
+                value_type = self.analyse(node.value)
+                self.symbols.define(node.target.id, value_type)
         
         elif isinstance(node, Name):
             if not self.symbols.exists(node.id):
@@ -355,5 +359,19 @@ class Analyser:
             for stmt in node.statements:
                 self.analyse(stmt)
         
+        elif isinstance(node, MapLiteral):
+            for k, v in node.pairs:
+                self.analyse(k)
+                self.analyse(v)
+            return UNKNOWN
+        elif isinstance(node, IndexGet):
+            self.analyse(node.obj)
+            self.analyse(node.index)
+            return UNKNOWN
+        elif isinstance(node, IndexSet):
+            self.analyse(node.obj)
+            self.analyse(node.index)
+            self.analyse(node.value)
+
         else:
             return None

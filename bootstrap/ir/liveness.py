@@ -73,7 +73,7 @@ def eliminate_dead_stores(cfg: CFG):
             is_side_affect = instr.op in (
                 "CALL", "CALL_BUILTIN", "CALL_METHOD", "RETURN",
                 "JUMP", "JUMP_IF_TRUE", "JUMP_IF_FALSE", "LABEL",
-                "STRUCT_DEF", "IMPORT_MODULE"
+                "STRUCT_DEF", "IMPORT_MODULE", "INDEX_SET", "SET_ATTR"
             ) or (instr.op == "STORE_VAR" and instr.a in read_vars)
             if is_side_affect or (defined_regs and any(d in needed for d in defined_regs)):
                 new_instrs.append(instr)

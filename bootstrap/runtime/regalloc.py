@@ -71,6 +71,18 @@ def get_defs_uses(instr):
     
     elif instr.op in ("LABEL", "STRUCT_DEF", "IMPORT_MODULE"):
         return [], []
+    
+    elif instr.op == "SET_ATTR":
+        # a = obj_reg, b = attr_name, c = value_reg
+        return [], [instr.a, instr.c]
+
+    elif instr.op == "BUILD_MAP":
+        uses = instr.arg_regs if hasattr(instr, "arg_regs") else []
+        return [instr.a], uses
+    elif instr.op == "INDEX_GET":
+        return [instr.a], [instr.b, instr.c]
+    elif instr.op == "INDEX_SET":
+        return [], [instr.a, instr.b, instr.c]
 
     else:
         print(f"Warning: unknown op in regalloc: {instr.op}")
@@ -205,7 +217,7 @@ def linear_scan_allocate(code, num_regs):
             )
         elif instr.op == "IMPORT_MODULE":
             new_instr = Instr(instr.op, instr.a, instr.b)
-        elif instr.op in ("BUILD_LIST", "BUILD_STRUCT"):
+        elif instr.op in ("BUILD_LIST", "BUILD_STRUCT", "BUILD_MAP"):
             new_instr = Instr(instr.op, rewrite_operand(instr.a), instr.b)
         else:
             new_instr = Instr(

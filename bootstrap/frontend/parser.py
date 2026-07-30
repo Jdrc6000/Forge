@@ -24,7 +24,11 @@ class Parser:
         return None
     
     # here lay our beloved skip_newlines function before we migrated to brace delimited blocks...
-    
+    # ok nvm, we need it back cuz i overhauled errors
+    def _skip_newlines(self):
+        while self.current_token.type == TokenType.NEWLINE:
+            self.advance()
+
     # an awesome helper function that parses an arg list that i totally wrote myself
     def _parse_arg_list(self):
         args = []
@@ -61,48 +65,20 @@ class Parser:
     def statement(self):
         if self.current_token.type == TokenType.LBRACE:
             return self.parse_block()
-        
         elif self.current_token.type == TokenType.IF:
             return self.parse_if()
-        
-        elif self.current_token.type == TokenType.NAME:
-            if self.peek() and self.peek().type == TokenType.LPAREN:
-                return self.parse_call()
-            
-            elif self.peek() and self.peek().type == TokenType.EQ:
-                return self.parse_assign()
-            
-            else:
-                tok = self.current_token
-                self.advance()
-                return Expr(
-                    value=Name(
-                        id=tok.value,
-                        line=tok.line,
-                        column=tok.column
-                    ),
-                    line=tok.line,
-                    column=tok.column
-                )
-        
         elif self.current_token.type == TokenType.FN:
             return self.parse_function()
-        
         elif self.current_token.type == TokenType.WHILE:
             return self.parse_while()
-        
         elif self.current_token.type == TokenType.FOR:
             return self.parse_for()
-        
         elif self.current_token.type == TokenType.RETURN:
             return self.parse_return()
-
         elif self.current_token.type == TokenType.STRUCT:
             return self.parse_struct()
-
         elif self.current_token.type == TokenType.IMPORT:
             return self.parse_import()
-        
         elif self.current_token.type == TokenType.BREAK:
             tok = self.current_token
             self.advance()
@@ -110,7 +86,6 @@ class Parser:
                 line=tok.line,
                 column=tok.column
             )
-        
         elif self.current_token.type == TokenType.CONTINUE:
             tok = self.current_token
             self.advance()
@@ -118,12 +93,30 @@ class Parser:
                 line=tok.line,
                 column=tok.column
             )
-        
         else:
+            expr = self.parse_expr()
+            if self.current_token.type == TokenType.EQ:
+                self.advance()
+                value = self.parse_expr()
+                expr = Assign(
+                    target=expr,
+                    value=value,
+                    line=expr.line,
+                    column=expr.column
+                )
+            
+            # Ensure statements end with a separator
+            if self.current_token.type not in (TokenType.NEWLINE, TokenType.EOF, TokenType.RBRACE):
+                raise ParseError(
+                    message=f"Unexpected token: {self.current_token}. Did you miss an operator or newline?",
+                    line=self.current_token.line,
+                    column=self.current_token.column
+                )
+                
             return Expr(
-                value=self.parse_expr(),
-                line=self.current_token.line,
-                column=self.current_token.column
+                value=expr,
+                line=expr.line,
+                column=expr.column
             )
     
     def parse_primary(self):
@@ -190,11 +183,12 @@ class Parser:
         
         elif tok.type == TokenType.LBRACE:
             self.advance()
+            self._skip_newlines()
             pairs = []
-            
             if self.current_token.type != TokenType.RBRACE:
                 while True:
                     key = self.parse_expr()
+                    self._skip_newlines()
                     if self.current_token.type != TokenType.COLON:
                         raise ParseError(
                             message="Expected ':' after map key",
@@ -202,15 +196,15 @@ class Parser:
                             column=self.current_token.column
                         )
                     self.advance() # consume ':'
+                    self._skip_newlines()
                     value = self.parse_expr()
                     pairs.append((key, value))
-                    
+                    self._skip_newlines()
                     if self.current_token.type == TokenType.COMMA:
                         self.advance()
-                    
+                        self._skip_newlines()
                     elif self.current_token.type == TokenType.RBRACE:
                         break
-                    
                     else:
                         raise ParseError(
                             message="Expected ',' or '}' in map literal",
@@ -258,25 +252,23 @@ class Parser:
         
         elif tok.type == TokenType.LBRACKET:
             self.advance()
+            self._skip_newlines()
             elements = []
-            
             if self.current_token.type != TokenType.RBRACKET:
                 while True:
                     elements.append(self.parse_expr())
-                    
+                    self._skip_newlines()
                     if self.current_token.type == TokenType.COMMA:
                         self.advance()
-                    
+                        self._skip_newlines()
                     elif self.current_token.type == TokenType.RBRACKET:
                         break
-                    
                     else:
                         raise ParseError(
                             message="Expected ',' or ']' in list literal",
                             line=self.current_token.line,
                             column=self.current_token.column
                         )
-            
             self.advance()
             node = List(
                 elements=elements,
@@ -340,16 +332,6 @@ class Parser:
             node = IndexGet(
                 obj=node,
                 index=index,
-                line=self.current_token.line,
-                column=self.current_token.column
-            )
-        
-        if self.current_token.type in (
-            TokenType.INT, TokenType.FLOAT, TokenType.STRING, TokenType.NAME, 
-            TokenType.LPAREN, TokenType.TRUE, TokenType.FALSE, TokenType.LBRACKET, TokenType.LBRACE
-        ):
-            raise ParseError(
-                message=f"Unexpected token: {self.current_token}. Did you miss an operator?",
                 line=self.current_token.line,
                 column=self.current_token.column
             )
@@ -541,6 +523,7 @@ class Parser:
 
         self.advance()  # consume ')'
 
+        self._skip_newlines()
         body = self.parse_block()
 
         return FunctionDef(
@@ -555,10 +538,12 @@ class Parser:
         if_token = self.current_token
         self.advance()  # skip 'if'
         test = self.parse_expr()
+        self._skip_newlines()
         body = self.parse_block()
         orelse = []
         if self.current_token.type == TokenType.ELSE:
             self.advance()  # skip 'else'
+            self._skip_newlines()
             
             if self.current_token.type == TokenType.IF:
                 # recursion!!! (else if { ... }) just becomes a new if branch
@@ -586,6 +571,7 @@ class Parser:
         while_token = self.current_token
         self.advance()  # skip 'while'
         test = self.parse_expr()
+        self._skip_newlines()
         body = self.parse_block()
         return While(
             test=test,
@@ -669,6 +655,7 @@ class Parser:
         self.advance()
 
         end = self.parse_expr()
+        self._skip_newlines()
         body = self.parse_block()
         
         return For(
@@ -701,7 +688,6 @@ class Parser:
     
     def parse_block(self):
         block_token = self.current_token
-        
         if self.current_token.type != TokenType.LBRACE:
             raise ParseError(
                 message="Expected '{' to start block",
@@ -709,13 +695,14 @@ class Parser:
                 column=self.current_token.column
             )
         self.advance() # skip '{'
-        
         body = []
         while self.current_token.type not in (TokenType.RBRACE, TokenType.EOF):
+            if self.current_token.type == TokenType.NEWLINE:
+                self.advance()
+                continue
             stmt = self.statement()
             if stmt is not None: # future-proof - empty statements
                 body.append(stmt)
-        
         if self.current_token.type != TokenType.RBRACE:
             raise ParseError(
                 message="Expected '}' to close block",
@@ -723,7 +710,6 @@ class Parser:
                 column=self.current_token.column
             )
         self.advance() # skip '}'
-        
         return Block(
             statements=body,
             line=block_token.line,
@@ -750,7 +736,8 @@ class Parser:
                 column=self.current_token.column
             )
         self.advance()
-        
+        self._skip_newlines()
+
         fields = []
         methods = []
         while self.current_token.type != TokenType.RBRACE:
@@ -800,6 +787,7 @@ class Parser:
             )
         
         self.advance()
+        self._skip_newlines()
         imports = []
         while self.current_token.type != TokenType.RBRACE:
             if self.current_token.type != TokenType.NAME:

@@ -93,6 +93,23 @@ class IRGenerator:
         return r
     
     def gen_Assign(self, node):
+        # Handle index assignment: map[key] = val or list[i] = val
+        if isinstance(node.target, IndexGet):
+            obj_reg = self.generate(node.target.obj)
+            index_reg = self.generate(node.target.index)
+            value_reg = self.generate(node.value)
+            instr = self.new_instr("INDEX_SET", obj_reg, index_reg, value_reg)
+            self.ir.code.append(instr)
+            return
+        # Handle attribute assignment: struct.field = val
+        if isinstance(node.target, Attribute):
+            obj_reg = self.generate(node.target.obj)
+            value_reg = self.generate(node.value)
+            instr = self.new_instr("SET_ATTR", obj_reg, node.target.attr, value_reg)
+            self.ir.code.append(instr)
+            return
+
+        # Standard variable assignment
         value_reg = self.generate(node.value)
         self.ir.emit("STORE_VAR", node.target.id, value_reg)
     
@@ -126,7 +143,7 @@ class IRGenerator:
         obj_reg = self.generate(node.obj)
         arg_regs = [self.generate(a) for a in node.args]
         dest = self.ir.new_reg()
-        instr = Instr("CALL_METHOD", dest, obj_reg, node.method)
+        instr = self.new_instr("CALL_METHOD", dest, obj_reg, node.method)
         instr.arg_regs = arg_regs
         self.ir.code.append(instr)
         return dest
@@ -375,3 +392,31 @@ class IRGenerator:
         instr.fields = node.fields
         instr.methods = [m.name for m in node.methods]
         self.ir.code.append(instr)
+    
+    # get ready for hashmaps!!!
+    def gen_MapLiteral(self, node):
+        kv_regs = []
+        for key_ast, val_ast in node.pairs:
+            kv_regs.append(self.generate(key_ast))
+            kv_regs.append(self.generate(val_ast))
+        dest = self.ir.new_reg()
+        instr = self.new_instr("BUILD_MAP", dest)
+        instr.arg_regs = kv_regs
+        self.ir.code.append(instr)
+        return dest
+
+    def gen_IndexGet(self, node):
+        obj_reg = self.generate(node.obj)
+        index_reg = self.generate(node.index)
+        dest = self.ir.new_reg()
+        instr = self.new_instr("INDEX_GET", dest, obj_reg, index_reg)
+        self.ir.code.append(instr)
+        return dest
+
+    def gen_IndexSet(self, node):
+        obj_reg = self.generate(node.obj)
+        index_reg = self.generate(node.index)
+        value_reg = self.generate(node.value)
+        instr = self.new_instr("INDEX_SET", obj_reg, index_reg, value_reg)
+        self.ir.code.append(instr)
+        return None

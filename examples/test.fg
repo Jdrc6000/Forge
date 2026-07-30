@@ -1,5 +1,22 @@
-float_1 = 3.14
-float_2 = 2.71
-product = float_1 * float_2
+# Create a map
+ages = {
+    "josh": 25,
+    "turing": 110
+}
 
-println(str(product))
+# Access a value by key
+my_age = ages["josh"]
+println(str(my_age))
+
+# Set a new key-value pair
+ages["ada"] = 36
+
+# Check if a key exists using the new method
+if ages.has("ada") {
+    println("Ada is in the map!")
+}
+
+# Get all keys and print the length
+keys = ages.keys()
+println("Total entries: " + str(keys.len()))
+println("Current value of Ada: " + str(ages["ada"]))

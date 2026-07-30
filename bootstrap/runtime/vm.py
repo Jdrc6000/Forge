@@ -343,6 +343,67 @@ class VM:
                 arg_regs = getattr(instr, "arg_regs", [])
                 self.regs[a.id] = [self.regs[r.id] for r in arg_regs]
             
+            elif op == "SET_ATTR":
+                obj = self.regs[a.id]
+                attr_name = b
+                value = self.regs[c.id]
+                if isinstance(obj, dict) and "__type__" in obj:
+                    obj[attr_name] = value
+                else:
+                    raise RuntimeError(
+                        message=f"Cannot set attribute on type {type(obj).__name__}",
+                        ip=self.ip, line=instr.line, column=instr.column
+                    )
+
+            elif op == "BUILD_MAP":
+                arg_regs = getattr(instr, "arg_regs", [])
+                new_map = {}
+                for i in range(0, len(arg_regs), 2):
+                    k = self.regs[arg_regs[i].id]
+                    v = self.regs[arg_regs[i+1].id]
+                    new_map[k] = v
+                self.regs[a.id] = new_map
+            elif op == "INDEX_GET":
+                obj = self.regs[b.id]
+                index = self.regs[c.id]
+                if isinstance(obj, (list, str)):
+                    if index < 0 or index >= len(obj):
+                        raise RuntimeError(
+                            message=f"Index out of bounds: {index}",
+                            ip=self.ip, line=instr.line, column=instr.column
+                        )
+                    self.regs[a.id] = obj[index]
+                elif isinstance(obj, dict):
+                    if index not in obj:
+                        raise RuntimeError(
+                            message=f"Key not found: {index}",
+                            ip=self.ip, line=instr.line, column=instr.column
+                        )
+                    self.regs[a.id] = obj[index]
+                else:
+                    raise RuntimeError(
+                        message=f"Cannot index type {type(obj).__name__}",
+                        ip=self.ip, line=instr.line, column=instr.column
+                    )
+            elif op == "INDEX_SET":
+                obj = self.regs[a.id]
+                index = self.regs[b.id]
+                value = self.regs[c.id]
+                if isinstance(obj, list):
+                    if index < 0 or index >= len(obj):
+                        raise RuntimeError(
+                            message=f"Index out of bounds: {index}",
+                            ip=self.ip, line=instr.line, column=instr.column
+                        )
+                    obj[index] = value
+                elif isinstance(obj, dict):
+                    obj[index] = value
+                else:
+                    raise RuntimeError(
+                        message=f"Cannot index type {type(obj).__name__}",
+                        ip=self.ip, line=instr.line, column=instr.column
+                    )
+            
             elif op == "BUILD_STRUCT":
                 # works alongside `STRUCT_DEF` below
                 arg_regs = getattr(instr, "arg_regs", [])
