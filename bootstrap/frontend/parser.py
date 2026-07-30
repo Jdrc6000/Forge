@@ -51,12 +51,11 @@ class Parser:
     
     def parse(self):
         body = []
-
         while self.current_token.type != TokenType.EOF:
-            if self.current_token.type == TokenType.EOF:
-                break
+            if self.current_token.type == TokenType.NEWLINE:
+                self.advance()
+                continue
             body.append(self.statement())
-
         return Module(body)
     
     def statement(self):
@@ -74,14 +73,16 @@ class Parser:
                 return self.parse_assign()
             
             else:
+                tok = self.current_token
+                self.advance()
                 return Expr(
                     value=Name(
-                        id=self.current_token.value,
-                        line=self.current_token.line,
-                        column=self.current_token.column
+                        id=tok.value,
+                        line=tok.line,
+                        column=tok.column
                     ),
-                    line=self.current_token.line,
-                    column=self.current_token.column
+                    line=tok.line,
+                    column=tok.column
                 )
         
         elif self.current_token.type == TokenType.FN:
@@ -343,6 +344,16 @@ class Parser:
                 column=self.current_token.column
             )
         
+        if self.current_token.type in (
+            TokenType.INT, TokenType.FLOAT, TokenType.STRING, TokenType.NAME, 
+            TokenType.LPAREN, TokenType.TRUE, TokenType.FALSE, TokenType.LBRACKET, TokenType.LBRACE
+        ):
+            raise ParseError(
+                message=f"Unexpected token: {self.current_token}. Did you miss an operator?",
+                line=self.current_token.line,
+                column=self.current_token.column
+            )
+
         return node
     
     def parse_assign(self):
@@ -436,20 +447,16 @@ class Parser:
     
     def parse_binop(self, min_prec=0):
         left = self.parse_unary()
-        
         while True:
             op_token = self.current_token
-            
             if op_token.type in (
                 TokenType.PLUS, TokenType.MINUS, TokenType.MUL,
                 TokenType.DIV, TokenType.POW
             ):
                 prec = self.get_precedence(op_token)
-                
                 if prec < min_prec:
                     break
                 self.advance()
-                
                 right = self.parse_binop(prec+1)
                 left = BinOp(
                     left=left,
@@ -458,10 +465,8 @@ class Parser:
                     line=self.current_token.line,
                     column=self.current_token.column
                 )
-
             else:
                 break
-        
         return left
     
     def parse_unary(self):

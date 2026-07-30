@@ -39,7 +39,13 @@ class IRGenerator:
         self.ir.emit("LOAD_CONST", default_reg, Imm(0))
         self.ir.emit("RETURN", default_reg)
     
+    # helper
+    def new_instr(self, op, a=None, b=None, c=None):
+        return Instr(op, a, b, c, line=self.ir.current_line, column=self.ir.current_column)
+
     def generate(self, node):
+        self.ir.current_line = getattr(node, 'line', 0) or self.ir.current_line
+        self.ir.current_column = getattr(node, 'column', 0) or self.ir.current_column
         method = f"gen_{type(node).__name__}"
         return getattr(self, method)(node)
     

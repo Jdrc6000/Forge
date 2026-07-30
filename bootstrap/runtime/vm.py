@@ -49,7 +49,9 @@ class VM:
         if not os.path.exists(path):
             raise RuntimeError(
                 message=f"Module '{module_name}' not found at '{path}'",
-                ip=self.ip
+                ip=self.ip,
+                line=instr.line,
+                column=instr.column
             )
         
         with open(path, "r", encoding="utf-8") as f:
@@ -84,14 +86,16 @@ class VM:
         for slot, value in self.stack.items(): # prints every spill var in stack
             print(f"spill {slot} {value}")
     
-    def find_label(self, label_name): # for functions / gen calls
+    def find_label(self, label_name, instr=None):
         for i, instr in enumerate(self.code):
             if instr.op == "LABEL" and instr.a == label_name:
                 return i
         
         raise LabelNotFoundError(
             message=f"Label not found: {label_name}",
-            ip=self.ip
+            ip=self.ip,
+            line=instr.line if instr else 0,
+            column=instr.column if instr else 0
         )
     
     def run(self, code):
@@ -122,7 +126,9 @@ class VM:
                     else:
                         raise RuntimeError(
                             message=f"Undefined variable '{b}'",
-                            ip=self.ip
+                            ip=self.ip,
+                            line=instr.line,
+                            column=instr.column
                         )
                 
                 else:
@@ -140,7 +146,9 @@ class VM:
                     if ns_key not in self.vars:
                         raise RuntimeError(
                             message=f"Module '{obj.alias}' has no export '{attr_name}'",
-                            ip=self.ip
+                            ip=self.ip,
+                            line=instr.line,
+                            column=instr.column
                         )
                     
                     self.regs[a.id] = self.vars[ns_key]
@@ -149,7 +157,9 @@ class VM:
                     if attr_name not in obj:
                         raise RuntimeError(
                             message=f"Struct has no field '{attr_name}'",
-                            ip=self.ip
+                            ip=self.ip,
+                            line=instr.line,
+                            column=instr.column
                         )
                     
                     self.regs[a.id] = obj[attr_name]
@@ -162,7 +172,9 @@ class VM:
                     except AttributeError as e:
                         raise RuntimeError(
                             message=str(e),
-                            ip=self.ip
+                            ip=self.ip,
+                            line=instr.line,
+                            column=instr.column
                         )
             
             elif op == "CALL_METHOD":
@@ -187,7 +199,9 @@ class VM:
                     
                     raise RuntimeError(
                         message=f"Module '{obj.alias}' has no function '{method_name}'",
-                        ip=self.ip
+                        ip=self.ip,
+                        line=instr.line,
+                        column=instr.column
                     )
                 
                 elif isinstance(obj, dict) and "__type__" in obj:
@@ -217,13 +231,17 @@ class VM:
                 except AttributeError as e:
                     raise RuntimeError(
                         message=str(e),
-                        ip=self.ip
+                        ip=self.ip,
+                        line=instr.line,
+                        column=instr.column
                     )
                 
                 except (TypeError, NotImplementedError) as e:
                     raise RuntimeError(
                         message=str(e),
-                        ip=self.ip
+                        ip=self.ip,
+                        line=instr.line,
+                        column=instr.column
                     )
             
             elif op == "CALL":
@@ -241,7 +259,7 @@ class VM:
                     if isinstance(func_val, tuple) and func_val[0] == "__func__":
                         target_ip = func_val[1]
                     else:
-                        target_ip = self.find_label(func_name)
+                        target_ip = self.find_label(func_name, instr)
                     
                     # saves ip, vars, and dest reg
                     self.call_stack.append(CallFrame(self.ip + 1, self.vars, self.regs[:], c))
@@ -407,7 +425,9 @@ class VM:
                 raise UnknownOpcodeError(
                     message=f"Unknown opcode {op}",
                     ip=self.ip,
-                    instruction=f"{op} {instr.a} {instr.b} {instr.c}"
+                    instruction=f"{op} {instr.a} {instr.b} {instr.c}",
+                    line=instr.line,
+                    column=instr.colum
                 )
     
             self.ip += 1

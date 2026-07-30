@@ -225,6 +225,9 @@ def linear_scan_allocate(code, num_regs):
             new_instr.struct_names = instr.struct_names
         if hasattr(instr, "methods"):
             new_instr.methods = instr.methods
+        
+        new_instr.line = instr.line
+        new_instr.column = instr.column
         new_code.append(new_instr)
         
         # store spilled defs back to memory from their scratch registers

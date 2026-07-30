@@ -54,6 +54,7 @@ class TokenType(Enum):
     RBRACKET = auto()
     
     ILLEGAL = auto()
+    NEWLINE = auto()
     EOF = auto()
     
     PRINT = auto()

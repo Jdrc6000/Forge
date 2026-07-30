@@ -125,7 +125,9 @@ class Lexer:
         
         while self.current_char is not None:
             if self.current_char == "\n":
+                line, col = self.line, self.col
                 self.advance()
+                tokens.append(Token(TokenType.NEWLINE, line=line, column=col))
                 continue
             
             elif self.current_char.isspace():
@@ -199,5 +201,5 @@ class Lexer:
                     token=Token(TokenType.ILLEGAL, self.current_char, self.line, self.col)
                 )
         
-        tokens.append(Token(TokenType.EOF))
+        tokens.append(Token(TokenType.EOF, line=self.line, column=self.col))
         return tokens

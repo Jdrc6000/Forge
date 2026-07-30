@@ -133,8 +133,8 @@ if __name__ == "__main__":
 # further additions to my pain
 #DONE list / arrays
 #     multiple return values
-#     error messages through vm
-#     proper call frame model instead of copying vars every call
+#DONE error messages through vm
+#DONE proper call frame model instead of copying vars every call
 #     string interpolations (hopefully josh knows what this means)
 #     default function arugments
 #DONE break / continue in loops
