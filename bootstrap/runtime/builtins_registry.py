@@ -1,6 +1,6 @@
 from typing import Dict, Callable, List, TYPE_CHECKING
 from bootstrap.ir.operands import Reg
-from exceptions import RuntimeError
+from bootstrap.exceptions import RuntimeError
 import os
 
 if TYPE_CHECKING: # what?

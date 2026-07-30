@@ -18,6 +18,14 @@ from bootstrap.runtime.regalloc import linear_scan_allocate
 # past-josh: PLEASE FOR THE LOVE OF GOD REFACTOR TO REGISTER-BASED!!
 # future-josh: your wish is my command
 # other past-josh: ok... PLEASE GET RID OF THIS AND COMPILE TO BYTECODE!!!!!!
+
+class CallFrame:
+    def __init__(self, return_ip, locals, regs, dest_reg):
+        self.return_ip = return_ip
+        self.locals = locals
+        self.regs = regs
+        self.dest_reg = dest_reg
+
 class VM:
     def __init__(self, num_regs, source_dir="."):
         self.num_regs = num_regs
@@ -168,7 +176,7 @@ class VM:
                     
                     if isinstance(func_val, tuple) and func_val[0] == "__func__":
                         target_ip = func_val[1]
-                        self.call_stack.append((self.ip + 1, self.vars.copy(), self.regs[:], a))
+                        self.call_stack.append(CallFrame(self.ip + 1, self.vars, self.regs[:], a))
                         self.ip = target_ip
                         label_instr = self.code[target_ip]
                         param_names = getattr(label_instr, "param_names", [])
@@ -188,7 +196,7 @@ class VM:
                     
                     if full_name in self.struct_methods:
                         target_ip = self.struct_methods[full_name]
-                        self.call_stack.append((self.ip + 1, self.vars.copy(), self.regs[:], a))
+                        self.call_stack.append(CallFrame(self.ip + 1, self.vars, self.regs[:], a))
                         self.ip = target_ip
                         label_instr = self.code[target_ip]
                         param_names = getattr(label_instr, "param_names", [])
@@ -236,7 +244,7 @@ class VM:
                         target_ip = self.find_label(func_name)
                     
                     # saves ip, vars, and dest reg
-                    self.call_stack.append((self.ip + 1, self.vars.copy(), self.regs[:], c))
+                    self.call_stack.append(CallFrame(self.ip + 1, self.vars, self.regs[:], c))
                     
                     self.ip = target_ip
                     self.vars = {}
@@ -303,13 +311,12 @@ class VM:
                     ret_value = self.regs[a.id]
 
                 if self.call_stack:
-                    self.ip, caller_vars, saved_regs, dest_reg = self.call_stack.pop()
-                    self.vars = caller_vars
-                    self.regs = saved_regs
-
-                    if ret_value is not None and dest_reg is not None:
-                        self.regs[dest_reg.id] = ret_value
-
+                    frame = self.call_stack.pop()
+                    self.ip = frame.return_ip
+                    self.vars = frame.locals
+                    self.regs = frame.regs
+                    if ret_value is not None and frame.dest_reg is not None:
+                        self.regs[frame.dest_reg.id] = ret_value
                     continue
                 else:
                     break
