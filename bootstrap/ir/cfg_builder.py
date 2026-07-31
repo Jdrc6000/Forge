@@ -8,6 +8,9 @@ BRANCH_OPS = {"JUMP_IF_TRUE", "JUMP_IF_FALSE"}
 def build_cfg(code: List[Instr]) -> CFG:
     cfg = CFG()
     
+    for i, instr in enumerate(code):
+        instr._orig_idx = i
+    
     # pass 1
     # leader: first instr, any jump target, or instr after a terminator
     leaders = {0}

@@ -16,6 +16,8 @@ from bootstrap.runtime.vm import VM
 from bootstrap.ir.operands import Reg, Imm
 from bootstrap.exceptions import *
 
+DEBUG = False
+
 def fmt(x):
     if isinstance(x, Reg): return f"r{x.id}"
     if isinstance(x, Imm): return x.value
@@ -39,7 +41,7 @@ def run_source(code, source_dir=".", filename="<string>", num_regs=1024):
     try:
         lexer = Lexer(code)
         tokens = lexer.get_tokens()
-        #print(tokens)
+        if DEBUG: print(tokens)
 
         parser = Parser(tokens)
         tree = parser.parse()

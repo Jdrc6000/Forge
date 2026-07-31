@@ -87,10 +87,27 @@ def eliminate_dead_stores(cfg: CFG):
         
         bb.instrs = list(reversed(new_instrs))
 
+def _is_function_entry(bb):
+    """A basic block that begins with a non-__main__ LABEL is the entry point of
+    a function. Functions are reached at runtime via CALL / find_label rather
+    than through CFG edges, so they must be treated as additional roots when
+    computing reachability."""
+    return (bb.instrs and
+            bb.instrs[0].op == "LABEL" and
+            isinstance(bb.instrs[0].a, str) and
+            bb.instrs[0].a != "__main__")
+
 def remove_unreachable(cfg: CFG):
     visited = set()
-    q = deque([cfg.entry])
+    q = deque()
+
+    if cfg.entry is not None:
+        q.append(cfg.entry)
     
+    for bb in cfg.blocks:
+        if _is_function_entry(bb):
+            q.append(bb)
+
     while q:
         bb = q.popleft()
         if bb.id in visited:
@@ -98,14 +115,5 @@ def remove_unreachable(cfg: CFG):
         visited.add(bb.id)
         for s in bb.succs:
             q.append(s)
-    
-    def is_function_entry(bb):
-        return (bb.instrs and 
-                bb.instrs[0].op == "LABEL" and 
-                isinstance(bb.instrs[0].a, str) and
-                bb.instrs[0].a != "__main__")
-    
-    cfg.blocks = [
-        bb for bb in cfg.blocks
-        if bb.id in visited or is_function_entry(bb)
-    ]
+
+    cfg.blocks = [bb for bb in cfg.blocks if bb.id in visited]

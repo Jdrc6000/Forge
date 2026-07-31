@@ -9,6 +9,7 @@ class IRGenerator:
         self.ir = IR()
         self.loop_stack = [] # [continue_ip, [break_patch_indicies]]
         self.current_struct_fields = None
+        self.func_depth = 0  # tracks nested function definitions
     
     def _gen_struct_method(self, struct_name, method_node):
         label = f"{struct_name}.{method_node.name}"
@@ -272,6 +273,14 @@ class IRGenerator:
         return dest
     
     def gen_FunctionDef(self, node):
+        nested = self.func_depth > 0
+        self.func_depth += 1
+        
+        jmp_over = None
+        if nested:
+            jmp_over = len(self.ir.code)
+            self.ir.emit("JUMP", None)
+        
         instr = Instr("LABEL", node.name)
         instr.param_names = node.args
         self.ir.code.append(instr)
@@ -283,6 +292,13 @@ class IRGenerator:
         default_reg = self.ir.new_reg()
         self.ir.emit("LOAD_CONST", default_reg, Imm(0))
         self.ir.emit("RETURN", default_reg)
+        
+        # Patch the jump-over to land right after the nested function's return,
+        # so the enclosing scope continues with its own statements.
+        if jmp_over is not None:
+            self.ir.code[jmp_over].a = len(self.ir.code)
+        
+        self.func_depth -= 1
     
     def gen_Return(self, node):
         if node.value:
