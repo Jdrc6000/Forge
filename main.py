@@ -45,7 +45,7 @@ def run_source(code, source_dir=".", filename="<string>", num_regs=1024):
 
         parser = Parser(tokens)
         tree = parser.parse()
-        #parser.dump(tree)
+        if DEBUG: parser.dump(tree)
 
         symbol_table = SymbolTable()
         semantic_analysis = Analyser(symbol_table, source_dir=source_dir)
@@ -53,24 +53,25 @@ def run_source(code, source_dir=".", filename="<string>", num_regs=1024):
 
         optimiser = Optimiser()
         tree = optimiser.optimise(tree)
-        #parser.dump(tree)
+        if DEBUG: parser.dump(tree)
 
         ir_generator = IRGenerator()
         ir_generator.generate(tree)
-        #ir_generator.ir.dump()
+        if DEBUG: ir_generator.ir.dump()
         
         cfg = build_cfg(ir_generator.ir.code)
-        #cfg.dump()
+        if DEBUG: cfg.dump()
         remove_unreachable(cfg) # first
         compute_liveness(cfg) # second
         eliminate_dead_stores(cfg) # third
-        #cfg.dump()
+        if DEBUG: cfg.dump()
 
         flat_code = cfg.flatten()
         allocated = linear_scan_allocate(flat_code, num_regs=num_regs)
 
-        #for i, instr in enumerate(allocated):
-        #    print(f"realloc{i} {instr.op} {fmt(instr.a)} {fmt(instr.b)} {fmt(instr.c)}") #:04 to pad to 4 0's
+        if DEBUG:
+             for i, instr in enumerate(allocated):
+                print(f"realloc{i} {instr.op} {fmt(instr.a)} {fmt(instr.b)} {fmt(instr.c)}")
 
         start_vm = time()
 
@@ -81,11 +82,11 @@ def run_source(code, source_dir=".", filename="<string>", num_regs=1024):
         
         start_vm = time()
         vm.run(allocated)
-        #vm.dump_regs()
+        if DEBUG: vm.dump_regs()
         
-        print(f"compile: {start_vm - start:.4f}s")
-        print(f"run: {time() - start_vm:.4f}s")
-        print(f"total: {time() - start:.4f}s")
+        print(f"compile: {start_vm - start:.6f}s")
+        print(f"run: {time() - start_vm:.6f}s")
+        print(f"total: {time() - start:.6f}s")
 
     except CompileError as e:
         print(format_diagnostic(
@@ -144,3 +145,5 @@ if __name__ == "__main__":
 #     type annotations
 #     hashmaps
 #     robustify the if / else if / else handling cuz teach said so
+
+# BUGS FIXED : 1

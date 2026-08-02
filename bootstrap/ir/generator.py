@@ -293,8 +293,6 @@ class IRGenerator:
         self.ir.emit("LOAD_CONST", default_reg, Imm(0))
         self.ir.emit("RETURN", default_reg)
         
-        # Patch the jump-over to land right after the nested function's return,
-        # so the enclosing scope continues with its own statements.
         if jmp_over is not None:
             self.ir.code[jmp_over].a = len(self.ir.code)
         

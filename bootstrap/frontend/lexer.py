@@ -47,9 +47,9 @@ class Lexer:
                 
                 if dot_count == 1:
                     next_char = self.peek()
-                    # If we see . followed by another . do NOT consume this dot as part of number
+                    # if we see . followed by another . do NOT consume this dot as part of number
                     if next_char == ".":
-                        break  # leave the .. for the range rule
+                        break # leave the .. for the range rule
                     
                     if next_char is None or not next_char.isdigit():
                         break
