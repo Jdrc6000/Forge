@@ -18,7 +18,7 @@ class NumberType(Type):
     name: ClassVar[str] = "number"
 
     def supports_binary(self, op: str, other: "Type") -> bool:
-        if op in {"+", "-", "*", "/", "^", "%"}:
+        if op in {"+", "-", "*", "/", "//", "^", "%"}:
             return isinstance(other, NumberType)
         return False
 

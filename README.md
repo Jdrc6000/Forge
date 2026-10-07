@@ -20,11 +20,11 @@ Forge is an educational personal project designed to help understand how program
 1. Lexical Analysis - Converts source text into a stream of tokens.
 2. Parser - Reads tokens and builds an Abstract Syntax Tree (AST).
 3. Semantic Analysis - Checks types, scopes, and ensures valid constructs.
-4. Optimisation (AST) — constant folding & dead-code elimination on the tree
+4. Optimisation (AST) - constant folding & dead-code elimination on the tree
 5. IR Generation - register-based IR with backpatched jumps
-6. CFG & Liveness — basic blocks, liveness analysis, unreachable-code & dead-store elimination
-7. Register Allocation — linear scan with spilling to memory slots
-8. Virtual Machine — dispatch loop, call frames, builtins, structs, modules
+6. CFG & Liveness - basic blocks, liveness analysis, unreachable-code & dead-store elimination
+7. Register Allocation - linear scan with spilling to memory slots
+8. Virtual Machine - dispatch loop, call frames, builtins, structs, modules
 
 ## Features
 * Responsive error messages
@@ -117,8 +117,51 @@ Step 5: 2
 Final step 6: 1
 ```
 
+##### Chudnovsky algorithm (calculating digits of pi)
+```
+fn isqrt(n) {
+    if n < 2 { return n }
+    x = n
+    y = (x + n // x) // 2
+    while y < x {
+        x = y
+        y = (x + n // x) // 2
+    }
+    return x
+}
+
+fn chudnovsky(digits) {
+    one = 10 ^ (2 * digits + 20)
+
+    k = 1
+    a_k = one
+    a_sum = one
+    b_sum = 0
+    C = 640320
+    C3_OVER_24 = C ^ 3 // 24
+    while true {
+        a_k = a_k * (-(6 * k - 5) * (2 * k - 1) * (6 * k - 1))
+        a_k = a_k // (k * k * k * C3_OVER_24)
+        a_sum = a_sum + a_k
+        b_sum = b_sum + (k * a_k)
+        k = k + 1
+        if a_k == 0 { break }
+    }
+    total = 13591409 * a_sum + 545140134 * b_sum
+    pi = (426880 * isqrt(10005 * one) * one) // total
+    return pi // (10 ^ 20)
+}
+
+println(str(chudnovsky(25)))
+```
+###### Expected output:
+```
+3141592653589793
+```
+
 ## References
 - [Creating Your Own Programming Language with Dr Laurie Tratt - Computerphile](https://www.youtube.com/watch?v=Q2UDHY5as90)
 - [Crafting Interpreters - Robert Nystrom](https://craftinginterpreters.com/contents.html)
-- [Collatz conjecture - Wikipedia](https://en.wikipedia.org/wiki/Collatz_conjecture)
-- [Linear Scan Register Allocation](https://web.cs.ucla.edu/~palsberg/course/cs132/linearscan.pdf)
+- [Linear Scan Register Allocation - Massimiliano Poletto and Vivek Sarkar](https://web.cs.ucla.edu/~palsberg/course/cs132/linearscan.pdf)
+- [Collatz conjecture - Lothar Collatz](https://en.wikipedia.org/wiki/Collatz_conjecture)
+- [Chudnovsky algorithm - Chudnovsky brothers](https://en.wikipedia.org/wiki/Chudnovsky_algorithm)

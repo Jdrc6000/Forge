@@ -164,6 +164,14 @@ class Lexer:
                 self.advance()
                 tokens.append(Token(TokenType.RANGE, line=start_line, column=start_col))
             
+            # floor divison, finally!!
+            elif self.current_char == "/" and self.peek() == "/":
+                start_line = self.line
+                start_col = self.col
+                self.advance()
+                self.advance()
+                tokens.append(Token(TokenType.FLOORDIV, line=start_line, column=start_col))
+
             elif self.current_char == ">":
                 start_line = self.line
                 start_col = self.col

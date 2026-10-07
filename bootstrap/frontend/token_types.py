@@ -10,6 +10,7 @@ class TokenType(Enum):
     MINUS = auto()
     MUL = auto()
     DIV = auto()
+    FLOORDIV = auto()
     POW = auto()
     MOD = auto()
     

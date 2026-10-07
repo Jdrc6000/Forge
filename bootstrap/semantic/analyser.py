@@ -214,6 +214,19 @@ class Analyser:
             node.inferred_type = left
             return left
         
+        elif isinstance(node, UnOp):
+            t = self.analyse(node.operand)
+            if t is None:
+                t = UNKNOWN
+            if node.op == "not":
+                return BOOL
+            if isinstance(t, (StringType, BoolType, ListType)):
+                raise TypeError(
+                    message=f"Unary operator '{node.op}' not supported for {t}",
+                    token=node
+                )
+            return t
+        
         elif isinstance(node, If):
             test_type = self.analyse(node.test)
             if test_type not in (BOOL, UNKNOWN) and test_type is not None:

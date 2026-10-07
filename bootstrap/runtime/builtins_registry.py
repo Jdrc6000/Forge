@@ -1,7 +1,7 @@
 from typing import Dict, Callable, List, TYPE_CHECKING
 from bootstrap.ir.operands import Reg
 from bootstrap.exceptions import RuntimeError
-import os
+import os, math
 
 if TYPE_CHECKING: # what?
     from .vm import VM
@@ -93,6 +93,14 @@ def builtin_float(vm, args):
 def builtin_str(vm, args):
     return str(args[0])
 
+def builtin_sqrt(vm, args):
+    n = args[0]
+    if isinstance(n, bool) or not isinstance(n, (int, float)):
+        raise RuntimeError(message=f"sqrt: expected a number, got {type(n).__name__}")
+    if n < 0:
+        raise RuntimeError(message=f"sqrt: cannot take square root of negative number {n}")
+    return math.sqrt(n)
+
 BUILTINS: Dict[str, Builtin] = {
     "print": Builtin("print", builtin_print, min_args=0, max_args=999),
     "println": Builtin("println", builtin_println, min_args=0, max_args=999),
@@ -109,4 +117,5 @@ BUILTINS: Dict[str, Builtin] = {
     "int": Builtin("int", builtin_int, min_args=1, max_args=1),
     "float": Builtin("float", builtin_float, min_args=1, max_args=1),
     "str": Builtin("str", builtin_str, min_args=1, max_args=1),
+    "sqrt": Builtin("sqrt", builtin_sqrt, min_args=1, max_args=1),
 }

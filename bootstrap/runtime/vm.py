@@ -464,9 +464,16 @@ class VM:
                         line=instr.line, column=instr.column
                     )
                 self.regs[a.id] = self.regs[b.id] / self.regs[c.id]
-            elif op == "MOD":                                  # ← add
+            elif op == "FLOORDIV":
                 if self.regs[c.id] == 0:
-                    raise DivisionByZeroError(                 # ← its moment has come
+                    raise DivisionByZeroError(
+                        message="Floor division by zero", ip=self.ip,
+                        line=instr.line, column=instr.column
+                    )
+                self.regs[a.id] = self.regs[b.id] // self.regs[c.id]
+            elif op == "MOD":
+                if self.regs[c.id] == 0:
+                    raise DivisionByZeroError(
                         message="Modulo by zero", ip=self.ip,
                         line=instr.line, column=instr.column
                     )

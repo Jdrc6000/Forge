@@ -5,18 +5,19 @@ from bootstrap.runtime.regalloc import get_defs_uses
 from collections import deque
 
 def reverse_postorder(cfg):
-    visited = set()
-    order = []
-    
+    visited, order = set(), []
     def dfs(bb):
         visited.add(bb.id)
         for succ in bb.succs:
             if succ.id not in visited:
                 dfs(succ)
         order.append(bb)
-    
-    dfs(cfg.entry)
-    return list(reversed(order)) # actually reverse postorder
+    if cfg.entry is not None:
+        dfs(cfg.entry)
+    for bb in cfg.blocks:
+        if _is_function_entry(bb) and bb.id not in visited:
+            dfs(bb)
+    return list(reversed(order))
 
 def compute_liveness(cfg: CFG):
     for bb in cfg.blocks:

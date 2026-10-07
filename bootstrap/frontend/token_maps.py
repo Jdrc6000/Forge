@@ -61,6 +61,7 @@ BINOPS = {
     "-": "SUB",
     "*": "MUL",
     "/": "DIV",
+    "//": "FLOORDIV",
     "^": "POW",
     "%": "MOD"
 }

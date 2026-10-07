@@ -1,6 +1,6 @@
 from time import time
 from pathlib import Path
-import os
+import os, sys
 
 from bootstrap.frontend.lexer import Lexer
 from bootstrap.frontend.parser import Parser
@@ -15,6 +15,9 @@ from bootstrap.runtime.vm import VM
 
 from bootstrap.ir.operands import Reg, Imm
 from bootstrap.exceptions import *
+
+if hasattr(sys, "set_int_max_str_digits"):
+    sys.set_int_max_str_digits(0)
 
 DEBUG = False
 
@@ -35,7 +38,7 @@ def run_file(filepath):
         code = f.read()
     run_source(code, source_dir=source_dir, filename=filepath)
 
-def run_source(code, source_dir=".", filename="<string>", num_regs=1024):
+def run_source(code, source_dir=".", filename="<string>", num_regs=8196):
     start = time()
 
     try:
@@ -77,7 +80,7 @@ def run_source(code, source_dir=".", filename="<string>", num_regs=1024):
         vm.code = allocated
         start_ip = vm.find_label("__main__")
         vm.ip = start_ip
-        
+
         start_vm = time()
 
         vm.run(allocated)
@@ -117,7 +120,7 @@ def run_source(code, source_dir=".", filename="<string>", num_regs=1024):
         raise RuntimeError(f"couldnt even begin to tell you where this came from: {e}") from e
 
 if __name__ == "__main__":
-    run_file(Path(__file__).parent / "examples/conjecture.fg")
+    run_file(Path(__file__).parent / "examples/pi.fg")
 
 # timeline for additions
 #DONE better errors (lineno / badline)
@@ -145,4 +148,4 @@ if __name__ == "__main__":
 #DONE hashmaps
 #     robustify the if / else if / else handling cuz teach said so
 
-# BUGS FIXED : 3
+# BUGS FIXED : 6

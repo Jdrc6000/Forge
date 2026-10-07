@@ -1,0 +1,7 @@
+println(str(7 // 2))      # 3
+println(str(-7 // 2))     # -4    (floor! this is the semantics you're committing to)
+println(str(7.5 // 2))    # 3.0
+println(str(10 // 2 // 5))  # 1   (left-associative)
+println(str(100 // 7))    # 14    (ConstantFolder folded this at compile time)
+println(str(640320 ^ 3 // 24))  # 10939059580000000-ish, exact — compare against int(640320 ^ 3 / 24) to see the float ULP drift you just escaped
+println(str(5 // 0))      # formatted DivisionByZeroError with caret

@@ -17,7 +17,7 @@ def get_defs_uses(instr):
         return [instr.a], []
 
     # arithmetic / comparisons that write to dest (a) and read b,c
-    elif instr.op in ("ADD", "SUB", "MUL", "DIV", "POW", "MOD", "EQ", "NE", "LT", "GT", "LE", "GE", "AND"):
+    elif instr.op in ("ADD", "SUB", "MUL", "DIV", "FLOORDIV", "POW", "MOD", "EQ", "NE", "LT", "GT", "LE", "GE", "AND"):
         uses = []
         if instr.b: uses.append(instr.b)
         if instr.c: uses.append(instr.c)
