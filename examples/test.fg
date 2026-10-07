@@ -1,9 +1,8 @@
-fn main() {
-    fn hello(name) {
-        println("hello, " + str(name) + "!")
-    }
 
-    hello("james")
+
+code = "2 2 +"
+stack = []
+
+for char in 1..3 {
+    println(char)
 }
-
-main()

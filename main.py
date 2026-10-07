@@ -37,7 +37,7 @@ def run_file(filepath):
 
 def run_source(code, source_dir=".", filename="<string>", num_regs=1024):
     start = time()
-    
+
     try:
         lexer = Lexer(code)
         tokens = lexer.get_tokens()
@@ -73,14 +73,13 @@ def run_source(code, source_dir=".", filename="<string>", num_regs=1024):
              for i, instr in enumerate(allocated):
                 print(f"realloc{i} {instr.op} {fmt(instr.a)} {fmt(instr.b)} {fmt(instr.c)}")
 
-        start_vm = time()
-
         vm = VM(num_regs=num_regs, source_dir=source_dir)
         vm.code = allocated
         start_ip = vm.find_label("__main__")
         vm.ip = start_ip
         
         start_vm = time()
+
         vm.run(allocated)
         if DEBUG: vm.dump_regs()
         
@@ -118,7 +117,7 @@ def run_source(code, source_dir=".", filename="<string>", num_regs=1024):
         raise RuntimeError(f"couldnt even begin to tell you where this came from: {e}") from e
 
 if __name__ == "__main__":
-    run_file(Path(__file__).parent / "examples/test.fg")
+    run_file(Path(__file__).parent / "examples/conjecture.fg")
 
 # timeline for additions
 #DONE better errors (lineno / badline)
@@ -139,11 +138,11 @@ if __name__ == "__main__":
 #DONE error messages through vm
 #DONE proper call frame model instead of copying vars every call
 #     string interpolations (hopefully josh knows what this means)
-#     default function arugments
+#NEXT default function arugments
 #DONE break / continue in loops
 #DONE more builtins
 #     type annotations
-#     hashmaps
+#DONE hashmaps
 #     robustify the if / else if / else handling cuz teach said so
 
-# BUGS FIXED : 1
+# BUGS FIXED : 3

@@ -28,6 +28,7 @@ SINGLE_CHAR_TOKENS = {
     "*": TokenType.MUL,
     "/": TokenType.DIV,
     "^": TokenType.POW,
+    "%": TokenType.MOD,
     
     "=": TokenType.EQ,
     "!": TokenType.BANG,
@@ -60,7 +61,8 @@ BINOPS = {
     "-": "SUB",
     "*": "MUL",
     "/": "DIV",
-    "^": "POW"
+    "^": "POW",
+    "%": "MOD"
 }
 
 CMP_OP_TO_IR = {

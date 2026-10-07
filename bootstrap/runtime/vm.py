@@ -458,7 +458,19 @@ class VM:
             elif op == "MUL":
                 self.regs[a.id] = self.regs[b.id] * self.regs[c.id]
             elif op == "DIV":
+                if self.regs[c.id] == 0:
+                    raise DivisionByZeroError(
+                        message="Division by zero", ip=self.ip,
+                        line=instr.line, column=instr.column
+                    )
                 self.regs[a.id] = self.regs[b.id] / self.regs[c.id]
+            elif op == "MOD":                                  # ← add
+                if self.regs[c.id] == 0:
+                    raise DivisionByZeroError(                 # ← its moment has come
+                        message="Modulo by zero", ip=self.ip,
+                        line=instr.line, column=instr.column
+                    )
+                self.regs[a.id] = self.regs[b.id] % self.regs[c.id]
             elif op == "POW":
                 self.regs[a.id] = self.regs[b.id] ** self.regs[c.id]
             elif op == "NEG":
@@ -488,7 +500,7 @@ class VM:
                     ip=self.ip,
                     instruction=f"{op} {instr.a} {instr.b} {instr.c}",
                     line=instr.line,
-                    column=instr.colum
+                    column=instr.column
                 )
     
             self.ip += 1

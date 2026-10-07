@@ -11,6 +11,7 @@ class TokenType(Enum):
     MUL = auto()
     DIV = auto()
     POW = auto()
+    MOD = auto()
     
     EQ = auto()
     BANG = auto()

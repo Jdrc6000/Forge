@@ -59,11 +59,13 @@ class ConstantFolder(Pass):
         if isinstance(node.left, Constant) and isinstance(node.right, Constant):
             l = node.left.value
             r = node.right.value
-            
+            if node.op in ("/", "%") and r == 0:
+                return node # don't crash, let runtime diagnose
             if node.op == "+": return Constant(l + r)
             if node.op == "-": return Constant(l - r)
             if node.op == "*": return Constant(l * r)
-            if node.op == "/" and r == 0: return node
+            if node.op == "/": return Constant(l / r)
+            if node.op == "%": return Constant(l % r)
             if node.op == "^": return Constant(l ** r)
             if node.op == "and": return Constant(l and r)
             if node.op == "or": return Constant(l or r)

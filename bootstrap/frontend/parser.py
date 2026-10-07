@@ -433,7 +433,7 @@ class Parser:
             op_token = self.current_token
             if op_token.type in (
                 TokenType.PLUS, TokenType.MINUS, TokenType.MUL,
-                TokenType.DIV, TokenType.POW
+                TokenType.DIV, TokenType.POW, TokenType.MOD
             ):
                 prec = self.get_precedence(op_token)
                 if prec < min_prec:
@@ -831,7 +831,8 @@ class Parser:
             TokenType.MINUS: "-",
             TokenType.MUL: "*",
             TokenType.DIV: "/",
-            TokenType.POW: "^"
+            TokenType.POW: "^",
+            TokenType.MOD: "%"
         }
         
         return mapping[token.type]
@@ -844,6 +845,7 @@ class Parser:
             TokenType.MINUS: 1,
             TokenType.MUL: 2,
             TokenType.DIV: 2,
+            TokenType.MOD: 2,
             TokenType.POW: 3
         }
         

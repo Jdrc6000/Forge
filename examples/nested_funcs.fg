@@ -1,0 +1,9 @@
+fn main() {
+    fn hello(name) {
+        println("hello, " + str(name) + "!")
+    }
+
+    hello("james")
+}
+
+main()
