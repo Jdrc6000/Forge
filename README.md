@@ -90,7 +90,7 @@ while i < 10 {
 
 ##### The Collatz Conjecture
 ```
-fn colltaz_conjecture(num) {
+fn collatz_conjecture(num) {
     if num % 2 == 0 {
         return int(num / 2)
     } else {
@@ -102,7 +102,7 @@ curr_num = 5
 index = 1
 while curr_num != 1 {
     println("Step " + str(index) + ": " + str(curr_num))
-    curr_num = colltaz_conjecture(curr_num)
+    curr_num = collatz_conjecture(curr_num)
     index = index + 1
 }
 println("Final step " + str(index) + ": " + str(curr_num))

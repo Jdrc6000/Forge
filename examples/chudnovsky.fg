@@ -32,4 +32,4 @@ fn chudnovsky(digits) {
     return pi // (10 ^ 20)
 }
 
-println(str(chudnovsky(100000)))
+println(str(chudnovsky(25)))

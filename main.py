@@ -120,7 +120,7 @@ def run_source(code, source_dir=".", filename="<string>", num_regs=8196):
         raise RuntimeError(f"couldnt even begin to tell you where this came from: {e}") from e
 
 if __name__ == "__main__":
-    run_file(Path(__file__).parent / "examples/pi.fg")
+    run_file(Path(__file__).parent / "examples/chudnovsky.fg")
 
 # timeline for additions
 #DONE better errors (lineno / badline)
